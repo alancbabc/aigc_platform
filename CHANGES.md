@@ -2,6 +2,10 @@
 
 ## 阶段一：第三方 API → 自部署 API 迁移
 
+## 阶段二：高优先级安全漏洞修复
+
+## 阶段三：生产部署准备 + 媒体鉴权改造 + 限流
+
 ## 概述
 
 将 aigc-platform 的 AI 生成能力从 ai.gitee.com 第三方 API 替换为自部署服务。
@@ -166,3 +170,94 @@
 
 ### 新增依赖
 - `express-rate-limit` ^7.5.0
+
+---
+
+## 阶段三：生产部署准备 + 媒体鉴权改造 + 限流
+
+### 生产部署准备
+- **`server/index.js`**: 添加 `compression` gzip 压缩、`helmet` 安全头、CORS 域名限制（`config.CORS_ORIGIN`）、`trust proxy` 设置
+- **`server/config.js`**: 新增 `NODE_ENV`、`CORS_ORIGIN` 配置项
+- **`server/middleware/security.js`**: 新文件，helmet 安全头中间件（X-Content-Type-Options, X-Frame-Options 等）
+- **`.env.production`**: 新文件，生产环境配置模板（部署服务器后使用）
+- `package.json` 新增 `compression`、`helmet` 依赖
+
+### 媒体鉴权改造（消除 URL Token 泄露）
+- **问题**: 原方案使用 `?token=<JWT>` 加载媒体文件，Token 会出现在 Nginx 日志、浏览器历史、Referer 头中
+- **修复**:
+  - **后端新增 `GET /api/media/:user/:file`**: 通过 Authorization header 鉴权，stream 发送文件（`res.sendFile`），完全消除 URL Token
+  - **移除 `/outputs/:user` 的 JWT 中间件**: 不再通过 URL 传递 Token
+  - **前端新增 `useMediaUrl(url)` Hook**: 通过 fetch + `URL.createObjectURL()` 异步加载媒体，使用 Authorization header 鉴权
+  - 所有 5 个组件（ResultDisplay、HistoryCard、HistoryDetail、AudioStudio、VideoStudio）改用 Hook
+  - `getMediaUrl()` 已完全移除
+
+### 生成接口频率限制
+- **`server/routes/generate.js`**: 添加 `express-rate-limit`，每用户每分钟最多 10 次生成请求
+- 基于用户名限流（已登录用户），防止 API 滥用
+
+### 健康检查
+- **`GET /api/health`**: 新增健康检查端点，返回 `{ status: "ok", timestamp }`，用于 PM2/Nginx 监控服务状态
+
+### 修改文件清单
+| 文件 | 操作 | 说明 |
+|------|------|------|
+| `server/index.js` | 修改 | 健康检查 + 媒体 API + gzip + helmet + CORS + trust proxy |
+| `server/config.js` | 修改 | 新增 NODE_ENV、CORS_ORIGIN |
+| `server/middleware/security.js` | **新增** | helmet 安全头 |
+| `server/routes/generate.js` | 修改 | 添加每用户每分钟 10 次限流 |
+| `src/api/client.js` | 修改 | 新增 `useMediaUrl()` Hook，移除 `getMediaUrl()` |
+| `src/components/common/ResultDisplay.jsx` | 修改 | `getMediaUrl` → `useMediaUrl` |
+| `src/components/history/HistoryCard.jsx` | 修改 | `getMediaUrl` → `useMediaUrl` |
+| `src/components/history/HistoryDetail.jsx` | 修改 | `getMediaUrl` → `useMediaUrl` |
+| `src/components/studio/AudioStudio.jsx` | 修改 | `getMediaUrl` → `useMediaUrl` |
+| `src/components/studio/VideoStudio.jsx` | 修改 | `getMediaUrl` → `useMediaUrl` |
+| `.env.production` | **新增** | 生产环境配置模板 |
+| `package.json` | 修改 | 新增 compression、helmet
+
+---
+
+## 阶段四：异步任务系统
+
+### 问题
+- 生成请求（尤其是视频）最长等待 50 分钟，HTTP 请求超时导致前端不可用
+- 页面刷新后生成状态丢失
+- 用户无法在生成过程中离开页面
+
+### 解决方案
+将同步请求（submit → poll → download → respond）改为异步模式：
+
+**新流程**：
+```
+用户点击生成 → POST /api/generate/xxx → 立即返回 { taskId, status: "pending" }
+                                          ↓
+后端后台处理 (submit → poll → download → save → addHistory → updateTask)
+                                          ↓
+前端轮询 GET /api/generate/status/:taskId (5s→10s 自适应)
+                                          ↓
+status === "done" → 显示结果
+status === "error" → 显示错误
+```
+
+### 实现细节
+
+**后端新增**：
+- `server/services/taskStore.js` — 内存任务存储（Map），每小时自动清理过期任务
+- `GET /api/generate/status/:taskId` — 查询任务状态（需 JWT + 用户验证）
+- `GET /api/generate/tasks` — 获取当前用户所有活跃任务（用于页面刷新恢复）
+- 每个生成路由改为：验证参数 → 创建任务 → 启动后台处理 → 立即返回 `{ taskId, status: "pending" }`
+- 后台处理函数 `processImageTask/processVideoTask/processAudioTask` 封装了完整的 submit → poll → download → addHistory 逻辑
+
+**前端新增**：
+- `src/api/client.js` — 新增 `taskAPI.getStatus(taskId)`、`taskAPI.getActive()`
+- `useTaskPolling()` Hook — 自动轮询 + 自适应间隔（前 6 次 5s，之后 10s）+ 页面刷新自动恢复
+- 3 个 Studio 组件改为基于任务状态渲染（`taskStatus` → `isGenerating` + `taskResult` + `taskError`）
+
+### 修改文件清单
+| 文件 | 操作 | 说明 |
+|------|------|------|
+| `server/services/taskStore.js` | **新增** | 内存任务存储（Map），TTL 1 小时 |
+| `server/routes/generate.js` | 重写 | 路由返回 taskId、后台异步处理、新增 status/tasks 端点 |
+| `src/api/client.js` | 修改 | 新增 `taskAPI`、`useTaskPolling()` Hook |
+| `src/components/studio/ImageStudio.jsx` | 修改 | 改用异步任务模式 |
+| `src/components/studio/VideoStudio.jsx` | 修改 | 改用异步任务模式 |
+| `src/components/studio/AudioStudio.jsx` | 修改 | 改用异步任务模式 |

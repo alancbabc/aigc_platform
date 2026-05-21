@@ -1,4 +1,4 @@
-import { getMediaUrl } from '../../api/client';
+import { useMediaUrl } from '../../api/client';
 
 const typeConfig = {
   image: { icon: '🖼', label: '图片' },
@@ -8,7 +8,7 @@ const typeConfig = {
 
 export default function HistoryCard({ item, onClick, onDelete }) {
   const config = typeConfig[item.type] || { icon: '📄', label: '未知' };
-  const resultUrl = getMediaUrl(item.results?.[0]?.url || '');
+  const resultUrl = useMediaUrl(item.results?.[0]?.url || '');
 
   return (
     <div

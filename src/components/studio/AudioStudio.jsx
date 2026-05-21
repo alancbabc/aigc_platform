@@ -1,5 +1,5 @@
 import { useState, useCallback } from 'react';
-import { generateAPI, getMediaUrl } from '../../api/client';
+import { generateAPI, useMediaUrl, useTaskPolling } from '../../api/client';
 import { audioModels, getAudioModelById } from '../../data/models';
 import ModelDropdown from '../common/ModelDropdown';
 import SimpleDropdown from '../common/SimpleDropdown';
@@ -33,9 +33,14 @@ export default function AudioStudio() {
   const [emoVector, setEmoVector] = useState([0, 0, 0, 0, 0, 0, 0, 0]);
   const [emoText, setEmoText] = useState('');
 
-  const [generating, setGenerating] = useState(false);
   const [error, setError] = useState(null);
-  const [result, setResult] = useState(null);
+
+  const { taskStatus, taskResult, taskError, isGenerating, startTask, resetTask } = useTaskPolling();
+  const result = taskResult?.results?.[0]
+    ? { url: taskResult.results[0].url, id: taskResult.historyId }
+    : null;
+  const resultMediaUrl = useMediaUrl(result?.url || '');
+  const displayError = error || taskError;
 
   const currentModel = getAudioModelById(selectedModelId);
   const isQwen = selectedModelId === 'Qwen3-TTS';
@@ -46,9 +51,8 @@ export default function AudioStudio() {
       setError('请输入文本内容');
       return;
     }
-    setGenerating(true);
     setError(null);
-    setResult(null);
+    resetTask();
     try {
       const params = {
         model: selectedModelId,
@@ -70,17 +74,11 @@ export default function AudioStudio() {
       }
 
       const data = await generateAPI.audio(params);
-      setResult({
-        url: data.results[0].url,
-        id: data.historyId,
-      });
+      startTask(data.taskId);
     } catch (err) {
       setError(err.message);
-      setTimeout(() => setError(null), 15000);
-    } finally {
-      setGenerating(false);
     }
-  }, [inputs, selectedModelId, language, speaker, instruct, refAudio, emoVector, emoText]);
+  }, [inputs, selectedModelId, language, speaker, instruct, refAudio, emoVector, emoText, startTask, resetTask]);
 
   const handleDownload = async () => {
     if (!result?.url) return;
@@ -152,8 +150,8 @@ export default function AudioStudio() {
                 <div className="w-12 h-12 bg-primary/10 rounded-full flex items-center justify-center text-2xl">🎵</div>
                 <div className="flex-1">
                   <p className="text-sm text-white font-bold mb-2">生成完成</p>
-                  <audio controls className="w-full h-10">
-                    <source src={getMediaUrl(result.url)} />
+                    <audio controls className="w-full h-10">
+                    <source src={resultMediaUrl} />
                   </audio>
                 </div>
                 <button onClick={handleDownload}
@@ -162,7 +160,7 @@ export default function AudioStudio() {
                 </button>
               </div>
             </div>
-          ) : generating ? (
+          ) : isGenerating ? (
             <EmptyState icon="⏳" title="生成中..." description="AI 正在为您生成音频，请稍候" />
           ) : (
             <EmptyState
@@ -179,7 +177,7 @@ export default function AudioStudio() {
                 onChange={e => setInstruct(e.target.value)}
                 placeholder="音色描述（可选）：用自然语言描述想要的音色，如「温柔知性的女声」"
                 rows={1}
-                disabled={generating}
+                disabled={isGenerating}
                 className="w-full bg-white/[0.03] border border-border rounded-xl px-4 py-2 text-sm text-white placeholder:text-white/15 focus:outline-none focus:ring-1 focus:ring-primary/30 focus:border-primary/30 resize-none"
               />
             )}
@@ -217,7 +215,7 @@ export default function AudioStudio() {
                 onChange={e => setEmoText(e.target.value)}
                 placeholder="情绪参考文本（可选）：输入带有情绪的文本作为表达参考"
                 rows={1}
-                disabled={generating}
+                disabled={isGenerating}
                 className="w-full bg-white/[0.03] border border-border rounded-xl px-4 py-2 text-sm text-white placeholder:text-white/15 focus:outline-none focus:ring-1 focus:ring-primary/30 focus:border-primary/30 resize-none"
               />
             )}
@@ -226,20 +224,20 @@ export default function AudioStudio() {
               value={inputs}
               onChange={setInputs}
               placeholder="输入要转换为语音的文本内容..."
-              disabled={generating}
+              disabled={isGenerating}
             />
 
             <GenerateButton
               onClick={handleGenerate}
-              loading={generating}
+              loading={isGenerating}
               disabled={!inputs.trim() || (isIndex && !refAudio)}
               label={isIndex && !refAudio ? '请先上传参考音频' : '生成语音'}
             />
           </div>
 
-          {error && (
+          {displayError && (
             <div className="px-4 py-2 bg-red-500/10 border border-red-500/20 rounded-lg animate-fade-in">
-              <p className="text-red-400 text-xs">{error}</p>
+              <p className="text-red-400 text-xs">{displayError}</p>
             </div>
           )}
         </div>

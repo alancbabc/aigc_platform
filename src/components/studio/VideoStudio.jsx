@@ -1,5 +1,5 @@
 import { useState, useCallback } from 'react';
-import { generateAPI, getMediaUrl } from '../../api/client';
+import { generateAPI, useMediaUrl, useTaskPolling } from '../../api/client';
 import { videoModels, getVideoModelById } from '../../data/models';
 import ModelDropdown from '../common/ModelDropdown';
 import SimpleDropdown from '../common/SimpleDropdown';
@@ -28,9 +28,14 @@ export default function VideoStudio() {
   const [duration, setDuration] = useState(videoModels[0].defaultDuration);
   const [quality, setQuality] = useState(videoModels[0].defaultQuality);
   const [enhancePrompt, setEnhancePrompt] = useState(false);
-  const [generating, setGenerating] = useState(false);
   const [error, setError] = useState(null);
-  const [result, setResult] = useState(null);
+
+  const { taskStatus, taskResult, taskError, isGenerating, startTask, resetTask } = useTaskPolling();
+  const result = taskResult?.results?.[0]
+    ? { url: taskResult.results[0].url, id: taskResult.historyId }
+    : null;
+  const resultMediaUrl = useMediaUrl(result?.url || '');
+  const displayError = error || taskError;
 
   const currentModel = getVideoModelById(selectedModelId);
 
@@ -39,9 +44,8 @@ export default function VideoStudio() {
       setError('请输入 Prompt 描述');
       return;
     }
-    setGenerating(true);
     setError(null);
-    setResult(null);
+    resetTask();
     try {
       let imageBase64 = undefined;
       if (referenceImage) {
@@ -60,17 +64,11 @@ export default function VideoStudio() {
         quality,
         enhance_prompt: enhancePrompt,
       });
-      setResult({
-        url: data.results[0].url,
-        id: data.historyId,
-      });
+      startTask(data.taskId);
     } catch (err) {
       setError(err.message);
-      setTimeout(() => setError(null), 15000);
-    } finally {
-      setGenerating(false);
     }
-  }, [prompt, negativePrompt, seed, selectedModelId, referenceImage, imageUrl, duration, resolution, quality, enhancePrompt]);
+  }, [prompt, negativePrompt, seed, selectedModelId, referenceImage, imageUrl, duration, resolution, quality, enhancePrompt, startTask, resetTask]);
 
   const handleDownload = async () => {
     if (!result?.url) return;
@@ -134,7 +132,7 @@ export default function VideoStudio() {
         <div className="flex-1 flex flex-col items-center justify-center gap-6 p-8 overflow-y-auto">
           {result ? (
             <div className="max-w-2xl w-full aspect-video rounded-2xl overflow-hidden border border-border bg-white/[0.02] relative group">
-              <video src={getMediaUrl(result.url)} controls autoPlay loop muted className="w-full h-full object-contain" />
+              <video src={resultMediaUrl} controls autoPlay loop muted className="w-full h-full object-contain" />
               <div className="absolute top-2 right-2 opacity-0 group-hover:opacity-100 transition-opacity">
                 <button onClick={handleDownload}
                   className="px-3 py-1.5 bg-white/10 backdrop-blur-sm rounded-lg text-xs text-white hover:bg-white/20 transition-colors">
@@ -142,7 +140,7 @@ export default function VideoStudio() {
                 </button>
               </div>
             </div>
-          ) : generating ? (
+          ) : isGenerating ? (
             <EmptyState icon="⏳" title="生成中..." description="视频生成需要较长时间，请耐心等待" />
           ) : (
             <EmptyState
@@ -169,7 +167,7 @@ export default function VideoStudio() {
                 onChange={e => setNegativePrompt(e.target.value)}
                 placeholder="负向提示词（可选）：描述你不想要的内容..."
                 rows={1}
-                disabled={generating}
+                disabled={isGenerating}
                 className="w-full bg-white/[0.03] border border-border rounded-xl px-4 py-2 text-sm text-white placeholder:text-white/15 focus:outline-none focus:ring-1 focus:ring-primary/30 focus:border-primary/30 resize-none"
               />
             )}
@@ -180,7 +178,7 @@ export default function VideoStudio() {
                 value={seed}
                 onChange={e => setSeed(e.target.value)}
                 placeholder="Seed（留空随机）"
-                disabled={generating}
+                disabled={isGenerating}
                 className="w-full bg-white/[0.03] border border-border rounded-xl px-4 py-2.5 text-sm text-white placeholder:text-white/15 focus:outline-none focus:ring-1 focus:ring-primary/30 focus:border-primary/30"
               />
             )}
@@ -189,7 +187,7 @@ export default function VideoStudio() {
               value={prompt}
               onChange={setPrompt}
               placeholder="描述你想要生成的视频内容..."
-              disabled={generating}
+              disabled={isGenerating}
             />
 
             <div className="flex items-center gap-3">
@@ -207,16 +205,16 @@ export default function VideoStudio() {
 
               <GenerateButton
                 onClick={handleGenerate}
-                loading={generating}
+                loading={isGenerating}
                 disabled={!prompt.trim()}
                 label="生成视频"
               />
             </div>
           </div>
 
-          {error && (
+          {displayError && (
             <div className="px-4 py-2 bg-red-500/10 border border-red-500/20 rounded-lg animate-fade-in">
-              <p className="text-red-400 text-xs">{error}</p>
+              <p className="text-red-400 text-xs">{displayError}</p>
             </div>
           )}
         </div>

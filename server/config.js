@@ -7,6 +7,8 @@ dotenv.config({ path: path.join(__dirname, '..', '.env') });
 
 export const config = {
   PORT: process.env.PORT || 3001,
+  NODE_ENV: process.env.NODE_ENV || 'development',
+  CORS_ORIGIN: process.env.CORS_ORIGIN || 'http://localhost:3002',
   JWT_SECRET: (() => {
     const secret = process.env.JWT_SECRET;
     if (!secret || secret === 'change-this-to-a-random-secret-in-production') {

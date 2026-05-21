@@ -1,5 +1,5 @@
 import { useState, useCallback } from 'react';
-import { generateAPI } from '../../api/client';
+import { generateAPI, useTaskPolling } from '../../api/client';
 import { imageModels, getImageModelById } from '../../data/models';
 import ModelDropdown from '../common/ModelDropdown';
 import SimpleDropdown from '../common/SimpleDropdown';
@@ -26,9 +26,13 @@ export default function ImageStudio() {
   const [negativePrompt, setNegativePrompt] = useState('');
   const [seed, setSeed] = useState('');
   const [inferenceSteps, setInferenceSteps] = useState(imageModels[0].defaultInferenceSteps);
-  const [generating, setGenerating] = useState(false);
   const [error, setError] = useState(null);
-  const [result, setResult] = useState(null);
+
+  const { taskStatus, taskResult, taskError, isGenerating, startTask, resetTask } = useTaskPolling();
+  const result = taskResult?.results?.[0]
+    ? { url: taskResult.results[0].url, id: taskResult.historyId }
+    : null;
+  const displayError = error || taskError;
 
   const currentModel = getImageModelById(selectedModelId);
   const sizes = currentModel.sizes || [];
@@ -43,9 +47,8 @@ export default function ImageStudio() {
       setError('请输入 Prompt 描述');
       return;
     }
-    setGenerating(true);
     setError(null);
-    setResult(null);
+    resetTask();
     try {
       let imageBase64 = undefined;
       if (referenceImage) {
@@ -61,17 +64,11 @@ export default function ImageStudio() {
         seed: seed || undefined,
         num_inference_steps: inferenceSteps,
       });
-      setResult({
-        url: data.results[0].url,
-        id: data.historyId,
-      });
+      startTask(data.taskId);
     } catch (err) {
       setError(err.message);
-      setTimeout(() => setError(null), 4000);
-    } finally {
-      setGenerating(false);
     }
-  }, [prompt, negativePrompt, seed, inferenceSteps, selectedModelId, selectedSize, referenceImage]);
+  }, [prompt, negativePrompt, seed, inferenceSteps, selectedModelId, selectedSize, referenceImage, startTask, resetTask]);
 
   const handleDownload = async () => {
     if (!result?.url) return;
@@ -128,7 +125,7 @@ export default function ImageStudio() {
         <div className="flex-1 flex flex-col items-center justify-center gap-6 p-8 overflow-y-auto">
           {result ? (
             <ResultDisplay url={result.url} type="image" onDownload={handleDownload} />
-          ) : generating ? (
+          ) : isGenerating ? (
             <EmptyState icon="⏳" title="生成中..." description="AI 正在为您创作图片，请稍候" />
           ) : (
             <EmptyState
@@ -145,7 +142,7 @@ export default function ImageStudio() {
                 onChange={e => setNegativePrompt(e.target.value)}
                 placeholder="负向提示词（可选）：描述你不想要的内容..."
                 rows={1}
-                disabled={generating}
+                disabled={isGenerating}
                 className="w-full bg-white/[0.03] border border-border rounded-xl px-4 py-2 text-sm text-white placeholder:text-white/15 focus:outline-none focus:ring-1 focus:ring-primary/30 focus:border-primary/30 resize-none"
               />
             )}
@@ -154,7 +151,7 @@ export default function ImageStudio() {
               value={prompt}
               onChange={setPrompt}
               placeholder="描述你想要生成的画面，例如：一只在夕阳下奔跑的赛博朋克猫..."
-              disabled={generating}
+              disabled={isGenerating}
             />
 
             <div className="flex items-center gap-3">
@@ -164,23 +161,23 @@ export default function ImageStudio() {
                   value={seed}
                   onChange={e => setSeed(e.target.value)}
                   placeholder="Seed（留空随机）"
-                  disabled={generating}
+                  disabled={isGenerating}
                   className="w-40 bg-white/[0.03] border border-border rounded-xl px-4 py-2.5 text-sm text-white placeholder:text-white/15 focus:outline-none focus:ring-1 focus:ring-primary/30 focus:border-primary/30"
                 />
               )}
 
               <GenerateButton
                 onClick={handleGenerate}
-                loading={generating}
+                loading={isGenerating}
                 disabled={!prompt.trim()}
                 label="生成图片"
               />
             </div>
           </div>
 
-          {error && (
+          {displayError && (
             <div className="px-4 py-2 bg-red-500/10 border border-red-500/20 rounded-lg animate-fade-in">
-              <p className="text-red-400 text-xs">{error}</p>
+              <p className="text-red-400 text-xs">{displayError}</p>
             </div>
           )}
         </div>

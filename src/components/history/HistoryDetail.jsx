@@ -31,10 +31,10 @@ function formatParamValue(key, value) {
   return String(value);
 }
 
-import { getMediaUrl } from '../../api/client';
+import { useMediaUrl } from '../../api/client';
 
 export default function HistoryDetail({ item, onClose, onDelete }) {
-  const resultUrl = getMediaUrl(item.results?.[0]?.url || '');
+  const resultUrl = useMediaUrl(item.results?.[0]?.url || '');
 
   return (
     <div

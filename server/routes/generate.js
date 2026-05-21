@@ -1,4 +1,5 @@
 import { Router } from 'express';
+import rateLimit from 'express-rate-limit';
 import axios from 'axios';
 import FormData from 'form-data';
 import fs from 'fs';
@@ -8,9 +9,47 @@ import { v4 as uuidv4 } from 'uuid';
 import { config } from '../config.js';
 import { authMiddleware } from '../middleware/auth.js';
 import { addHistory } from '../services/historyStore.js';
+import { createTask, updateTask, getTask, getUserTasks } from '../services/taskStore.js';
+
+const generateLimiter = rateLimit({
+  windowMs: 60 * 1000,
+  max: 30,
+  message: { error: '请求过于频繁，请稍后再试（每分钟最多 30 次）' },
+  standardHeaders: true,
+  legacyHeaders: false,
+  keyGenerator: (req) => req.user?.username || 'anonymous',
+  validate: { xForwardedForHeader: false },
+});
 
 export const generateRouter = Router();
 generateRouter.use(authMiddleware);
+generateRouter.use(generateLimiter);
+
+// 任务状态查询（不需要速率限制）
+generateRouter.get('/status/:taskId', (req, res) => {
+  const task = getTask(req.params.taskId);
+  if (!task) return res.status(404).json({ error: 'Task not found' });
+  if (task.username !== req.user.username) return res.status(403).json({ error: 'Forbidden' });
+  res.json({
+    taskId: task.id,
+    type: task.type,
+    status: task.status,
+    result: task.result,
+    error: task.error,
+    createdAt: task.createdAt,
+    updatedAt: task.updatedAt,
+  });
+});
+
+generateRouter.get('/tasks', (req, res) => {
+  const tasks = getUserTasks(req.user.username);
+  res.json({ tasks: tasks.map(t => ({
+    taskId: t.id,
+    type: t.type,
+    status: t.status,
+    createdAt: t.createdAt,
+  })) });
+});
 
 // ========= 工具函数 =========
 
@@ -109,17 +148,12 @@ async function downloadTask(baseUrl, taskId, savePath) {
   }
 }
 
-// ========= 图片生成 (Qwen Image :9000) =========
+// ========= 后台任务处理函数 =========
 
-generateRouter.post('/image', async (req, res) => {
+async function processImageTask(taskId, username, params) {
+  updateTask(taskId, { status: 'processing' });
   try {
-    const { model, prompt, size, image, negative_prompt, seed, num_inference_steps } = req.body;
-    const username = req.user.username;
-
-    if (!prompt?.trim()) {
-      return res.status(400).json({ error: 'Prompt is required' });
-    }
-
+    const { model, prompt, size, image, negative_prompt, seed, num_inference_steps } = params;
     const { width, height } = parseSize(size || '1024x1024');
     const steps = num_inference_steps || 50;
     const hasImage = !!image;
@@ -143,13 +177,13 @@ generateRouter.post('/image', async (req, res) => {
       });
     }
 
-    const taskId = await submitTask(config.AI_IMAGE_URL, form);
-    await pollTask(config.AI_IMAGE_URL, taskId);
+    const aiTaskId = await submitTask(config.AI_IMAGE_URL, form);
+    await pollTask(config.AI_IMAGE_URL, aiTaskId);
 
     const outputDir = ensureOutputDir(username);
     const filename = `${formatTimestamp()}_img.png`;
     const savePath = path.join(outputDir, filename);
-    await downloadTask(config.AI_IMAGE_URL, taskId, savePath);
+    await downloadTask(config.AI_IMAGE_URL, aiTaskId, savePath);
 
     tempFiles.forEach(f => { try { fs.unlinkSync(f); } catch {} });
 
@@ -170,30 +204,24 @@ generateRouter.post('/image', async (req, res) => {
     };
     const historyRecord = await addHistory(username, historyEntry);
 
-    res.json({
-      success: true,
-      historyId: historyRecord.id,
-      results: [{ url: `/outputs/${username}/${filename}` }],
+    updateTask(taskId, {
+      status: 'done',
+      result: {
+        success: true,
+        historyId: historyRecord.id,
+        results: [{ url: `/outputs/${username}/${filename}` }],
+      },
     });
   } catch (err) {
-    console.error('[generate] image error:', err.message);
-    res.status(500).json({
-      error: 'Image generation failed',
-      detail: err.response?.data || err.message,
-    });
+    console.error(`[task ${taskId}] image error:`, err.message);
+    updateTask(taskId, { status: 'error', error: err.response?.data || err.message });
   }
-});
+}
 
-// ========= 视频生成 (LTX 2.3 :8000) =========
-
-generateRouter.post('/video', async (req, res) => {
+async function processVideoTask(taskId, username, params) {
+  updateTask(taskId, { status: 'processing' });
   try {
-    const { model, prompt, image_base64, image_url, negative_prompt, seed, duration, resolution, quality, enhance_prompt } = req.body;
-    const username = req.user.username;
-
-    if (!prompt?.trim()) {
-      return res.status(400).json({ error: 'Prompt is required' });
-    }
+    const { model, prompt, image_base64, image_url, negative_prompt, seed, duration, resolution, quality, enhance_prompt } = params;
 
     const { width, height } = parseSize(resolution || '1088x1920');
     const seconds = duration || 5;
@@ -214,7 +242,6 @@ generateRouter.post('/video', async (req, res) => {
     if (enhance_prompt) form.append('enhance_prompt', 'true');
 
     let tempFiles = [];
-    // 优先使用上传的 base64 图片，其次使用 URL
     const hasReference = !!(image_base64 || image_url);
     if (image_base64) {
       const tmpPath = base64ToTempFile(image_base64, 'png');
@@ -238,13 +265,13 @@ generateRouter.post('/video', async (req, res) => {
       form.append('image_crfs', '0');
     }
 
-    const taskId = await submitTask(config.AI_VIDEO_URL, form);
-    await pollTask(config.AI_VIDEO_URL, taskId);
+    const aiTaskId = await submitTask(config.AI_VIDEO_URL, form);
+    await pollTask(config.AI_VIDEO_URL, aiTaskId);
 
     const outputDir = ensureOutputDir(username);
     const filename = `${formatTimestamp()}_video.mp4`;
     const savePath = path.join(outputDir, filename);
-    await downloadTask(config.AI_VIDEO_URL, taskId, savePath);
+    await downloadTask(config.AI_VIDEO_URL, aiTaskId, savePath);
 
     tempFiles.forEach(f => { try { fs.unlinkSync(f); } catch {} });
 
@@ -270,47 +297,37 @@ generateRouter.post('/video', async (req, res) => {
     };
     const historyRecord = await addHistory(username, historyEntry);
 
-    res.json({
-      success: true,
-      historyId: historyRecord.id,
-      results: [{ url: `/outputs/${username}/${filename}` }],
+    updateTask(taskId, {
+      status: 'done',
+      result: {
+        success: true,
+        historyId: historyRecord.id,
+        results: [{ url: `/outputs/${username}/${filename}` }],
+      },
     });
   } catch (err) {
-    console.error('[generate] video error:', err.message);
-    res.status(500).json({
-      error: 'Video generation failed',
-      detail: err.response?.data || err.message,
-    });
+    console.error(`[task ${taskId}] video error:`, err.message);
+    updateTask(taskId, { status: 'error', error: err.response?.data || err.message });
   }
-});
+}
 
-// ========= 音频生成 =========
-// Qwen3-TTS → Qwen TTS (:9200), IndexTTS-2 → Index TTS (:9300)
-
-generateRouter.post('/audio', async (req, res) => {
+async function processAudioTask(taskId, username, params) {
+  updateTask(taskId, { status: 'processing' });
   try {
-    const { model, inputs, language, speaker, instruct, ref_audio_base64, emo_vector, emo_text } = req.body;
-    const username = req.user.username;
+    const { model, inputs, language, speaker, instruct, ref_audio_base64, emo_vector, emo_text } = params;
     const text = inputs?.trim();
-
-    if (!text) {
-      return res.status(400).json({ error: 'Input text is required' });
-    }
-
     const modelId = model || 'Qwen3-TTS';
-    let taskId;
+
+    let aiTaskId;
     let tempFiles = [];
     let baseUrl;
     let paramsRecord;
 
     if (modelId === 'IndexTTS-2') {
-      // ---- Index TTS (人声克隆) ----
       baseUrl = config.AI_VOICE_URL;
 
       if (!ref_audio_base64) {
-        return res.status(400).json({
-          error: 'IndexTTS-2 需要上传参考音频 (.wav) 作为音色克隆的样本，请先在参数栏上传参考音频',
-        });
+        throw new Error('IndexTTS-2 需要上传参考音频 (.wav) 作为音色克隆的样本');
       }
 
       const form = new FormData();
@@ -332,8 +349,8 @@ generateRouter.post('/audio', async (req, res) => {
         form.append('emo_text', emo_text.trim());
       }
 
-      taskId = await submitTask(baseUrl, form);
-      await pollTask(baseUrl, taskId);
+      aiTaskId = await submitTask(baseUrl, form);
+      await pollTask(baseUrl, aiTaskId);
 
       paramsRecord = {
         text,
@@ -342,7 +359,6 @@ generateRouter.post('/audio', async (req, res) => {
         emo_text: emo_text || null,
       };
     } else {
-      // ---- Qwen TTS (预设音色) ----
       baseUrl = config.AI_TTS_URL;
       const form = new FormData();
       form.append('text', text);
@@ -351,8 +367,8 @@ generateRouter.post('/audio', async (req, res) => {
       if (language) form.append('language', language);
       if (instruct?.trim()) form.append('instruct', instruct.trim());
 
-      taskId = await submitTask(baseUrl, form);
-      await pollTask(baseUrl, taskId);
+      aiTaskId = await submitTask(baseUrl, form);
+      await pollTask(baseUrl, aiTaskId);
 
       paramsRecord = {
         text,
@@ -366,7 +382,7 @@ generateRouter.post('/audio', async (req, res) => {
     const outputDir = ensureOutputDir(username);
     const filename = `${formatTimestamp()}_audio.wav`;
     const savePath = path.join(outputDir, filename);
-    await downloadTask(baseUrl, taskId, savePath);
+    await downloadTask(baseUrl, aiTaskId, savePath);
 
     tempFiles.forEach(f => { try { fs.unlinkSync(f); } catch {} });
 
@@ -379,17 +395,77 @@ generateRouter.post('/audio', async (req, res) => {
     };
     const historyRecord = await addHistory(username, historyEntry);
 
-    res.json({
-      success: true,
-      historyId: historyRecord.id,
-      results: [{ url: `/outputs/${username}/${filename}` }],
+    updateTask(taskId, {
+      status: 'done',
+      result: {
+        success: true,
+        historyId: historyRecord.id,
+        results: [{ url: `/outputs/${username}/${filename}` }],
+      },
     });
   } catch (err) {
-    console.error('[generate] audio error:', err.message);
+    console.error(`[task ${taskId}] audio error:`, err.message);
     const detail = err.response?.data || err.message;
-    res.status(500).json({
-      error: typeof detail === 'string' ? detail : 'Audio generation failed',
-      detail,
-    });
+    updateTask(taskId, { status: 'error', error: typeof detail === 'string' ? detail : 'Audio generation failed' });
+  }
+}
+
+// ========= 异步生成路由 =========
+
+generateRouter.post('/image', async (req, res) => {
+  try {
+    const { model, prompt, size, image, negative_prompt, seed, num_inference_steps } = req.body;
+    const username = req.user.username;
+
+    if (!prompt?.trim()) {
+      return res.status(400).json({ error: 'Prompt is required' });
+    }
+
+    const task = createTask(username, 'image');
+    processImageTask(task.id, username, { model, prompt, size, image, negative_prompt, seed, num_inference_steps });
+
+    res.json({ taskId: task.id, status: 'pending' });
+  } catch (err) {
+    console.error('[generate] image error:', err.message);
+    res.status(500).json({ error: 'Failed to start image generation' });
+  }
+});
+
+generateRouter.post('/video', async (req, res) => {
+  try {
+    const { model, prompt, image_base64, image_url, negative_prompt, seed, duration, resolution, quality, enhance_prompt } = req.body;
+    const username = req.user.username;
+
+    if (!prompt?.trim()) {
+      return res.status(400).json({ error: 'Prompt is required' });
+    }
+
+    const task = createTask(username, 'video');
+    processVideoTask(task.id, username, { model, prompt, image_base64, image_url, negative_prompt, seed, duration, resolution, quality, enhance_prompt });
+
+    res.json({ taskId: task.id, status: 'pending' });
+  } catch (err) {
+    console.error('[generate] video error:', err.message);
+    res.status(500).json({ error: 'Failed to start video generation' });
+  }
+});
+
+generateRouter.post('/audio', async (req, res) => {
+  try {
+    const { model, inputs, language, speaker, instruct, ref_audio_base64, emo_vector, emo_text } = req.body;
+    const username = req.user.username;
+    const text = inputs?.trim();
+
+    if (!text) {
+      return res.status(400).json({ error: 'Input text is required' });
+    }
+
+    const task = createTask(username, 'audio');
+    processAudioTask(task.id, username, { model, inputs, language, speaker, instruct, ref_audio_base64, emo_vector, emo_text });
+
+    res.json({ taskId: task.id, status: 'pending' });
+  } catch (err) {
+    console.error('[generate] audio error:', err.message);
+    res.status(500).json({ error: 'Failed to start audio generation' });
   }
 });

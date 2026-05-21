@@ -1,9 +1,9 @@
 import { useState } from 'react';
-import { getMediaUrl } from '../../api/client';
+import { useMediaUrl } from '../../api/client';
 
 export default function ResultDisplay({ url, type = 'image', onDownload }) {
   const [fullscreen, setFullscreen] = useState(false);
-  const mediaUrl = getMediaUrl(url);
+  const mediaUrl = useMediaUrl(url);
 
   const renderMedia = () => {
     switch (type) {
