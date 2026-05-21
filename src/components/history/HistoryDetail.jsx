@@ -1,5 +1,40 @@
+const paramLabels = {
+  prompt: '提示词',
+  negative_prompt: '负向提示词',
+  height: '高度',
+  width: '宽度',
+  num_frames: '总帧数',
+  frame_rate: '帧率',
+  video_seconds: '时长(秒)',
+  num_inference_steps: '推理步数',
+  seed: '种子',
+  pipeline_name: '流水线',
+  enhance_prompt: '增强提示词',
+  has_reference_image: '参考图',
+  language: '语言',
+  speaker: '音色',
+  instruct: '音色描述',
+  text: '文本',
+  emo_vector: '情绪向量',
+  emo_text: '情绪参考文本',
+};
+
+function formatParamValue(key, value) {
+  if (value === null || value === undefined || value === '') return '-';
+  if (key === 'enhance_prompt' || key === 'has_reference_image') {
+    return value ? '是' : '否';
+  }
+  if (key === 'emo_vector' && Array.isArray(value)) {
+    return value.map(v => v.toFixed(1)).join(', ');
+  }
+  if (typeof value === 'boolean') return value ? '是' : '否';
+  return String(value);
+}
+
+import { getMediaUrl } from '../../api/client';
+
 export default function HistoryDetail({ item, onClose, onDelete }) {
-  const resultUrl = item.results?.[0]?.url || '';
+  const resultUrl = getMediaUrl(item.results?.[0]?.url || '');
 
   return (
     <div
@@ -60,13 +95,30 @@ export default function HistoryDetail({ item, onClose, onDelete }) {
             </div>
           )}
 
+          {/* 动态渲染所有存储的参数 */}
+          {item.params && Object.keys(item.params).length > 0 && (
+            <div className="mt-6">
+              <span className="text-[10px] font-bold text-white/30 uppercase tracking-wider">生成参数</span>
+              <div className="mt-2 grid grid-cols-2 sm:grid-cols-3 gap-2">
+                {Object.entries(item.params).map(([key, value]) => {
+                  if (key === 'prompt' || key === 'text') return null;
+                  if (value === null || value === undefined || value === '') return null;
+                  const label = paramLabels[key] || key;
+                  return (
+                    <div key={key} className="bg-white/[0.02] rounded-lg p-2.5 border border-border">
+                      <span className="text-[10px] font-bold text-white/30 uppercase">{label}</span>
+                      <p className="text-xs text-white/70 mt-0.5 truncate">{formatParamValue(key, value)}</p>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          )}
+
           <div className="mt-4 grid grid-cols-2 sm:grid-cols-3 gap-3">
             <InfoRow label="模型" value={item.model} />
             <InfoRow label="类型" value={item.type} />
             {item.size && <InfoRow label="尺寸" value={item.size} />}
-            {item.duration && <InfoRow label="时长" value={`${item.duration}s`} />}
-            {item.aspect_ratio && <InfoRow label="比例" value={item.aspect_ratio} />}
-            {item.voice && <InfoRow label="嗓音" value={item.voice} />}
             <InfoRow label="创建时间" value={new Date(item.createdAt).toLocaleString('zh-CN')} />
           </div>
         </div>

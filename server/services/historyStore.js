@@ -1,25 +1,10 @@
 import fs from 'fs';
 import path from 'path';
 import { config } from '../config.js';
+import { readJSON, writeJSON } from '../utils/fileStore.js';
 
 function getHistoryFile(username) {
   return path.join(config.DATA_DIR, 'history', `${username}.json`);
-}
-
-function readHistory(username) {
-  const file = getHistoryFile(username);
-  if (!fs.existsSync(file)) return [];
-  try {
-    return JSON.parse(fs.readFileSync(file, 'utf-8'));
-  } catch {
-    return [];
-  }
-}
-
-function writeHistory(username, history) {
-  const dir = path.dirname(getHistoryFile(username));
-  if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
-  fs.writeFileSync(getHistoryFile(username), JSON.stringify(history, null, 2), 'utf-8');
 }
 
 function generateId() {
@@ -30,25 +15,26 @@ function generateId() {
 }
 
 export function getHistory(username) {
-  return readHistory(username).sort(
+  const data = readJSON(getHistoryFile(username));
+  return (data || []).sort(
     (a, b) => new Date(b.createdAt) - new Date(a.createdAt)
   );
 }
 
-export function addHistory(username, entry) {
-  const history = readHistory(username);
+export async function addHistory(username, entry) {
+  const history = readJSON(getHistoryFile(username)) || [];
   const newEntry = {
     id: generateId(),
     ...entry,
     createdAt: new Date().toISOString(),
   };
   history.unshift(newEntry);
-  writeHistory(username, history);
+  await writeJSON(getHistoryFile(username), history);
   return newEntry;
 }
 
-export function deleteHistory(username, id) {
-  const history = readHistory(username);
+export async function deleteHistory(username, id) {
+  const history = readJSON(getHistoryFile(username)) || [];
   const entry = history.find(h => h.id === id);
   if (!entry) return false;
 
@@ -64,6 +50,6 @@ export function deleteHistory(username, id) {
   }
 
   const filtered = history.filter(h => h.id !== id);
-  writeHistory(username, filtered);
+  await writeJSON(getHistoryFile(username), filtered);
   return true;
 }

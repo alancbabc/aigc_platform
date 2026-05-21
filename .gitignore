@@ -5,3 +5,5 @@ server/data/
 .env.local
 *.log
 .DS_Store
+*.wav
+temp_ref.*

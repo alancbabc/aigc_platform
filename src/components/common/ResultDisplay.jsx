@@ -1,13 +1,15 @@
 import { useState } from 'react';
+import { getMediaUrl } from '../../api/client';
 
 export default function ResultDisplay({ url, type = 'image', onDownload }) {
   const [fullscreen, setFullscreen] = useState(false);
+  const mediaUrl = getMediaUrl(url);
 
   const renderMedia = () => {
     switch (type) {
       case 'video':
         return (
-          <video src={url} controls autoPlay loop muted className="w-full h-full object-contain" />
+          <video src={mediaUrl} controls autoPlay loop muted className="w-full h-full object-contain" />
         );
       case 'audio':
         return (
@@ -16,12 +18,12 @@ export default function ResultDisplay({ url, type = 'image', onDownload }) {
               <div className="w-20 h-20 bg-primary/10 rounded-2xl flex items-center justify-center text-4xl">
                 🎵
               </div>
-              <audio src={url} controls className="w-64" />
+              <audio src={mediaUrl} controls className="w-64" />
             </div>
           </div>
         );
       default:
-        return <img src={url} alt="Generated result" className="w-full h-full object-contain" />;
+        return <img src={mediaUrl} alt="Generated result" className="w-full h-full object-contain" />;
     }
   };
 
@@ -69,10 +71,10 @@ export default function ResultDisplay({ url, type = 'image', onDownload }) {
             </svg>
           </button>
           {type === 'image' && (
-            <img src={url} alt="Fullscreen" className="max-w-full max-h-full rounded-xl shadow-4xl" />
+            <img src={mediaUrl} alt="Fullscreen" className="max-w-full max-h-full rounded-xl shadow-4xl" />
           )}
           {type === 'video' && (
-            <video src={url} controls autoPlay className="max-w-full max-h-full rounded-xl shadow-4xl" />
+            <video src={mediaUrl} controls autoPlay className="max-w-full max-h-full rounded-xl shadow-4xl" />
           )}
         </div>
       )}

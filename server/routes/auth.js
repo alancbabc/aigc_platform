@@ -1,9 +1,19 @@
 import { Router } from 'express';
+import rateLimit from 'express-rate-limit';
 import { hashPassword, comparePassword } from '../utils/crypto.js';
 import { signToken } from '../utils/token.js';
 import { findUser, createUser } from '../services/userStore.js';
 
+const authLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 20,
+  message: { error: 'Too many attempts, please try again after 15 minutes' },
+  standardHeaders: true,
+  legacyHeaders: false,
+});
+
 export const authRouter = Router();
+authRouter.use(authLimiter);
 
 authRouter.post('/register', async (req, res) => {
   try {
@@ -25,7 +35,7 @@ authRouter.post('/register', async (req, res) => {
     }
 
     const passwordHash = await hashPassword(password);
-    const user = createUser(username, passwordHash);
+    const user = await createUser(username, passwordHash);
     const token = signToken({ username: user.username });
 
     res.status(201).json({

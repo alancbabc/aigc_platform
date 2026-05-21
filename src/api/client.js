@@ -1,5 +1,17 @@
 const BASE_URL = '/api';
 
+export function getMediaUrl(url) {
+  if (!url) return '';
+  try {
+    const stored = localStorage.getItem('aigc_auth');
+    if (stored) {
+      const token = JSON.parse(stored).token || '';
+      if (token) return `${url}?token=${encodeURIComponent(token)}`;
+    }
+  } catch {}
+  return url;
+}
+
 async function apiRequest(endpoint, options = {}) {
   let token = '';
   try {

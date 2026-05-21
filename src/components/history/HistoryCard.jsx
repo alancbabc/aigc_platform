@@ -1,3 +1,5 @@
+import { getMediaUrl } from '../../api/client';
+
 const typeConfig = {
   image: { icon: '🖼', label: '图片' },
   video: { icon: '🎬', label: '视频' },
@@ -6,7 +8,7 @@ const typeConfig = {
 
 export default function HistoryCard({ item, onClick, onDelete }) {
   const config = typeConfig[item.type] || { icon: '📄', label: '未知' };
-  const resultUrl = item.results?.[0]?.url || '';
+  const resultUrl = getMediaUrl(item.results?.[0]?.url || '');
 
   return (
     <div

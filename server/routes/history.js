@@ -16,10 +16,10 @@ historyRouter.get('/', (req, res) => {
   }
 });
 
-historyRouter.delete('/:id', (req, res) => {
+historyRouter.delete('/:id', async (req, res) => {
   try {
     const username = req.user.username;
-    const deleted = deleteHistory(username, req.params.id);
+    const deleted = await deleteHistory(username, req.params.id);
     if (!deleted) {
       return res.status(404).json({ error: 'History entry not found' });
     }
