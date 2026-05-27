@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { getMediaUrl } from '../../api/client';
+import FullscreenModal from './FullscreenModal';
 
 export default function ResultDisplay({ url, type = 'image', onDownload }) {
   const [fullscreen, setFullscreen] = useState(false);
@@ -59,24 +60,14 @@ export default function ResultDisplay({ url, type = 'image', onDownload }) {
       </div>
 
       {fullscreen && (
-        <div onClick={() => setFullscreen(false)}
-          className="fixed inset-0 z-50 bg-black/90 backdrop-blur-sm flex items-center justify-center p-8 animate-fade-in">
-          <button
-            type="button"
-            onClick={() => setFullscreen(false)}
-            className="absolute top-4 right-4 p-2 bg-white/10 rounded-full hover:bg-white/20 transition-colors z-10"
-          >
-            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2.5">
-              <line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" />
-            </svg>
-          </button>
+        <FullscreenModal onClose={() => setFullscreen(false)}>
           {type === 'image' && (
             <img src={mediaUrl} alt="Fullscreen" className="max-w-full max-h-full rounded-xl shadow-4xl" />
           )}
           {type === 'video' && (
             <video src={mediaUrl} controls autoPlay className="max-w-full max-h-full rounded-xl shadow-4xl" />
           )}
-        </div>
+        </FullscreenModal>
       )}
     </>
   );

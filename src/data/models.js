@@ -3,6 +3,8 @@ export const imageModels = [
     id: 'Qwen-Image',
     name: 'Qwen Image',
     description: '通义千问文生图/图生图（自部署）',
+    pipeline: 'qwen_image',
+    pipelineWithImage: 'qwen_image_edit',
     sizes: ['1024x1024', '768x768', '1328x1328', '1024x768', '768x1024', '1536x1024', '1024x1536'],
     defaultSize: '1024x1024',
     supportsNegativePrompt: true,
@@ -10,6 +12,7 @@ export const imageModels = [
     supportsInferenceSteps: true,
     defaultInferenceSteps: 50,
     inferenceStepOptions: [20, 30, 50],
+    outputExt: 'png',
   },
 ];
 
@@ -18,6 +21,9 @@ export const videoModels = [
     id: 'LTX-2',
     name: 'LTX 2.3',
     description: '文生视频/图生视频（自部署）',
+    pipeline: 'ti2vid_two_stages_hq',
+    pipelineStandard: 'ti2v_two_stage',
+    pipelineWithAudio: 'a2vid_two_stage',
     supportsImage: true,
     supportsNegativePrompt: true,
     supportsSeed: true,
@@ -31,6 +37,29 @@ export const videoModels = [
     defaultResolution: '1088x1920',
     durations: [3, 5, 10, 15],
     defaultDuration: 5,
+    numInferenceSteps: 15,
+    frameRate: 24,
+    outputExt: 'mp4',
+  },
+];
+
+export const interpolationModels = [
+  {
+    id: 'LTX-2-Interpolation',
+    name: 'LTX 2.3',
+    description: '关键帧插帧生成平滑过渡视频（自部署）',
+    pipeline: 'keyframe_interpolation_two_stage',
+    supportsImage: true,
+    supportsNegativePrompt: true,
+    supportsSeed: true,
+    supportsEnhancePrompt: true,
+    resolutions: ['1088x1920', '1024x1536', '1024x1024', '720x1280', '576x1024'],
+    defaultResolution: '1088x1920',
+    durations: [3, 5, 10, 15],
+    defaultDuration: 5,
+    numInferenceSteps: 15,
+    frameRate: 24,
+    outputExt: 'mp4',
   },
 ];
 
@@ -39,6 +68,8 @@ export const audioModels = [
     id: 'Qwen3-TTS',
     name: 'Qwen3 TTS',
     description: '通义千问语音合成，支持预设音色（自部署）',
+    pipelineCustomVoice: 'qwen_tts_customvoice',
+    pipelineVoiceDesign: 'qwen_tts_voicedesign',
     supportsSpeaker: true,
     supportsLanguage: true,
     supportsInstruct: true,
@@ -55,16 +86,19 @@ export const audioModels = [
     ],
     defaultSpeaker: 'Vivian',
     languages: ['auto', 'chinese', 'english', 'japanese', 'korean'],
+    outputExt: 'wav',
   },
   {
     id: 'IndexTTS-2',
     name: 'IndexTTS 2',
     description: '高质量语音克隆，支持情绪控制（自部署）',
+    pipeline: 'index_tts',
     supportsRefAudio: true,
     supportsEmotionVector: true,
     supportsEmotionAudio: true,
     supportsEmotionText: true,
     emotionLabels: ['高兴', '愤怒', '悲伤', '害怕', '厌恶', '忧郁', '惊讶', '平静'],
+    outputExt: 'wav',
   },
 ];
 
@@ -78,4 +112,8 @@ export function getVideoModelById(id) {
 
 export function getAudioModelById(id) {
   return audioModels.find(m => m.id === id) || audioModels[0];
+}
+
+export function getInterpolationModelById(id) {
+  return interpolationModels.find(m => m.id === id) || interpolationModels[0];
 }

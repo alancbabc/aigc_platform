@@ -1,99 +1,91 @@
 import { useState, useCallback, useRef, useEffect } from 'react';
 import { createGenerationAPI, getMediaUrl } from '../../api/client';
-import { videoModels, getVideoModelById } from '../../data/models';
+import { interpolationModels, getInterpolationModelById } from '../../data/models';
 import ModelDropdown from '../common/ModelDropdown';
 import SimpleDropdown from '../common/SimpleDropdown';
-import UploadButton from '../common/UploadButton';
 import PromptInput from '../common/PromptInput';
 import GenerateButton from '../common/GenerateButton';
 import EmptyState from '../common/EmptyState';
-import { readFileAsBase64 } from '../../utils/fileHelpers';
+import { readFileAsBase64, revokeObjectURL } from '../../utils/fileHelpers';
 import { downloadResult } from '../../utils/download';
 
-const MODE_CONFIG = {
-  text2video: {
-    badge: '文生视频',
-    badgeClass: 'bg-primary/10 text-primary border-primary/30',
-    icon: '🎬',
-    title: '文生视频',
-    desc: '输入 Prompt 描述视频内容，选择质量和参数，点击生成',
-    promptPlaceholder: '描述你想要生成的视频内容，例如：海滩上夕阳下的海浪...',
-    btnLabel: '生成视频',
-    btnDisabledLabel: '请输入 Prompt',
-    needsImage: false,
-    needsAudio: false,
-    showQuality: true,
-    canGenerate: (prompt) => !!prompt.trim(),
-  },
-  image2video: {
-    badge: '图生视频',
-    badgeClass: 'bg-purple-500/10 text-purple-400 border-purple-500/30',
-    icon: '🖼→🎬',
-    title: '图生视频',
-    desc: '上传一张参考图片，输入 Prompt，AI 将基于图片生成动态视频',
-    promptPlaceholder: '描述基于参考图想要生成的视频内容和动效...',
-    btnLabel: '生成视频',
-    btnDisabledLabel: '请上传参考图片并输入 Prompt',
-    needsImage: true,
-    needsAudio: false,
-    showQuality: false,
-    canGenerate: (prompt, hasImage) => !!prompt.trim() && hasImage,
-  },
-  a2v: {
-    badge: '音生视频',
-    badgeClass: 'bg-amber-500/10 text-amber-400 border-amber-500/30',
-    icon: '🎵→🎬',
-    title: '音频驱动视频',
-    desc: '上传一段音频，输入 Prompt，AI 将根据音频节奏驱动画面动效',
-    promptPlaceholder: '描述与音频氛围匹配的视频画面内容...',
-    btnLabel: '生成视频',
-    btnDisabledLabel: '请上传音频文件并输入 Prompt',
-    needsImage: false,
-    needsAudio: true,
-    showQuality: false,
-    canGenerate: (prompt, _, hasAudio) => !!prompt.trim() && hasAudio,
-  },
-};
-
-export default function VideoStudio({ mode = 'text2video' }) {
-  const cfg = MODE_CONFIG[mode] || MODE_CONFIG.text2video;
-
-  const [selectedModelId, setSelectedModelId] = useState(videoModels[0].id);
-  const [referenceImage, setReferenceImage] = useState(null);
+export default function InterpolationStudio() {
+  const [selectedModelId, setSelectedModelId] = useState(interpolationModels[0].id);
   const [prompt, setPrompt] = useState('');
   const [negativePrompt, setNegativePrompt] = useState('');
   const [seed, setSeed] = useState('');
-  const [resolution, setResolution] = useState(videoModels[0].defaultResolution);
-  const [duration, setDuration] = useState(videoModels[0].defaultDuration);
-  const [quality, setQuality] = useState(videoModels[0].defaultQuality);
+  const [resolution, setResolution] = useState(interpolationModels[0].defaultResolution);
+  const [duration, setDuration] = useState(interpolationModels[0].defaultDuration);
   const [enhancePrompt, setEnhancePrompt] = useState(false);
-  const [audioFile, setAudioFile] = useState(null);
+  const [frameFiles, setFrameFiles] = useState([]);
+  const [framePositions, setFramePositions] = useState('');
+  const [frameStrengths, setFrameStrengths] = useState('');
   const [genNum, setGenNum] = useState(1);
   const [generating, setGenerating] = useState(false);
   const [error, setError] = useState(null);
   const [results, setResults] = useState(null);
   const [selectedResultIdx, setSelectedResultIdx] = useState(0);
-
+  const fileInputRef = useRef(null);
+  const [previewUrls, setPreviewUrls] = useState([]);
   const abortRef = useRef(null);
   const generatingRef = useRef(false);
   const submitGuardRef = useRef(false);
 
   useEffect(() => {
-    return () => abortRef.current?.abort();
-  }, []);
+    return () => {
+      previewUrls.forEach(url => revokeObjectURL(url));
+      abortRef.current?.abort();
+    };
+  }, [previewUrls]);
 
-  const currentModel = getVideoModelById(selectedModelId);
-  const modelResolutions = currentModel.resolutions || [];
-  const hasImage = !!referenceImage;
-  const hasAudio = !!audioFile;
-  const canGenerate = cfg.canGenerate(prompt, hasImage, hasAudio);
+  const currentModel = getInterpolationModelById(selectedModelId);
+
+  const handleFrameUpload = (e) => {
+    const files = Array.from(e.target.files || []);
+    const newFiles = [...frameFiles, ...files].slice(0, 10);
+    setFrameFiles(newFiles);
+    const urls = newFiles.map(f => URL.createObjectURL(f));
+    setPreviewUrls(prev => {
+      prev.forEach(u => revokeObjectURL(u));
+      return urls;
+    });
+    e.target.value = '';
+  };
+
+  const removeFrame = (index) => {
+    revokeObjectURL(previewUrls[index]);
+    setPreviewUrls(prev => prev.filter((_, i) => i !== index));
+    setFrameFiles(prev => prev.filter((_, i) => i !== index));
+  };
+
+  const parseCommaSeparated = (input, label, expectedCount) => {
+    if (!input.trim()) return null;
+    const values = input.split(',').map(s => {
+      const trimmed = s.trim();
+      if (!trimmed || isNaN(parseFloat(trimmed))) {
+        throw new Error(`${label}包含无效值: "${s.trim()}"，请检查输入格式`);
+      }
+      return parseFloat(trimmed);
+    });
+    if (values.length !== expectedCount) {
+      throw new Error(`${label}数量(${values.length})与关键帧数量(${expectedCount})不匹配`);
+    }
+    return values;
+  };
 
   const handleCancel = useCallback(() => {
     abortRef.current?.abort();
   }, []);
 
   const handleGenerate = useCallback(async () => {
-    if (!canGenerate) return;
+    if (!prompt.trim()) {
+      setError('请输入 Prompt 描述');
+      return;
+    }
+    if (frameFiles.length === 0) {
+      setError('请上传至少一张关键帧图片');
+      return;
+    }
     if (submitGuardRef.current) return;
     submitGuardRef.current = true;
     abortRef.current = new AbortController();
@@ -103,27 +95,23 @@ export default function VideoStudio({ mode = 'text2video' }) {
     setResults(null);
     setSelectedResultIdx(0);
     try {
-      let imageBase64 = undefined;
-      if (referenceImage) {
-        imageBase64 = await readFileAsBase64(referenceImage);
-      }
-      let audioBase64 = undefined;
-      if (audioFile) {
-        audioBase64 = await readFileAsBase64(audioFile);
-      }
+      const base64Frames = await Promise.all(frameFiles.map(f => readFileAsBase64(f)));
+
+      const positions = parseCommaSeparated(framePositions, '关键帧位置', frameFiles.length);
+      const strengths = parseCommaSeparated(frameStrengths, '强度', frameFiles.length);
 
       const api = createGenerationAPI(abortRef.current.signal);
-      const data = await api.video({
+      const data = await api.interpolation({
         model: currentModel,
         prompt: prompt.trim(),
-        image_base64: imageBase64,
+        frames: base64Frames,
+        frame_positions: positions,
+        frame_strengths: strengths,
         negative_prompt: negativePrompt.trim() || undefined,
         seed: seed || undefined,
         duration,
         resolution,
-        quality: cfg.showQuality ? quality : undefined,
         enhance_prompt: enhancePrompt,
-        audio_base64: audioBase64,
         gen_num: genNum,
       });
       if (generatingRef.current) {
@@ -146,39 +134,26 @@ export default function VideoStudio({ mode = 'text2video' }) {
       abortRef.current = null;
       submitGuardRef.current = false;
     }
-  }, [prompt, negativePrompt, seed, currentModel, referenceImage, duration, resolution, quality, enhancePrompt, audioFile, genNum, canGenerate, cfg.showQuality]);
+  }, [prompt, negativePrompt, seed, currentModel, frameFiles, framePositions, frameStrengths, duration, resolution, enhancePrompt, genNum]);
 
   const handleDownload = (url) => downloadResult(url, 'generated.mp4');
+
   const currentResult = results?.[selectedResultIdx];
 
   return (
     <div className="h-full flex flex-col">
       <div className="flex-shrink-0 px-6 py-4 flex items-center gap-3 border-b border-border flex-wrap">
-        <span className={`px-2 py-0.5 rounded-md text-[10px] font-bold border ${cfg.badgeClass}`}>
-          {cfg.badge}
+        <span className="px-2 py-0.5 rounded-md text-[10px] font-bold border bg-primary/10 text-primary border-primary/30">
+          插帧生成
         </span>
-
         <ModelDropdown
-          models={videoModels}
+          models={interpolationModels}
           selectedModel={selectedModelId}
           onSelect={(m) => setSelectedModelId(m.id)}
         />
-
-        {cfg.showQuality && (
-          <SimpleDropdown
-            title="质量"
-            options={currentModel.qualities.map(q => q.name)}
-            selected={currentModel.qualities.find(q => q.id === quality)?.name || ''}
-            onSelect={(v) => {
-              const q = currentModel.qualities.find(q => q.name === v);
-              if (q) setQuality(q.id);
-            }}
-          />
-        )}
-
         <SimpleDropdown
           title="分辨率"
-          options={modelResolutions}
+          options={currentModel.resolutions}
           selected={resolution}
           onSelect={setResolution}
         />
@@ -188,51 +163,21 @@ export default function VideoStudio({ mode = 'text2video' }) {
           selected={String(duration)}
           onSelect={(v) => setDuration(parseInt(v))}
         />
-
-        {cfg.needsImage && (
-          <>
-            <div className="w-px h-6 bg-border hidden sm:block" />
-            <div className="flex items-center gap-1">
-              <UploadButton
-                onUpload={(file) => setReferenceImage(file)}
-                onClear={() => setReferenceImage(null)}
-                accept="image/*"
-                label="上传参考图片"
-              />
-              {!hasImage && (
-                <span className="text-[10px] text-red-400/70 whitespace-nowrap">* 必传</span>
-              )}
-              {referenceImage && (
-                <span className="text-[11px] text-white/40 truncate max-w-[100px]">{referenceImage.name}</span>
-              )}
-            </div>
-          </>
-        )}
-
-        {cfg.needsAudio && (
-          <>
-            <div className="w-px h-6 bg-border hidden sm:block" />
-            <div className="flex items-center gap-1">
-              <UploadButton
-                onUpload={(file) => setAudioFile(file)}
-                onClear={() => setAudioFile(null)}
-                accept="audio/*"
-                label="上传音频文件"
-                icon={(
-                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                    <path d="M9 18V5l12-2v13" /><circle cx="6" cy="18" r="3" /><circle cx="18" cy="16" r="3" />
-                  </svg>
-                )}
-              />
-              {!hasAudio && (
-                <span className="text-[10px] text-red-400/70 whitespace-nowrap">* 必传</span>
-              )}
-              {audioFile && (
-                <span className="text-[11px] text-white/40 truncate max-w-[100px]">{audioFile.name}</span>
-              )}
-            </div>
-          </>
-        )}
+        <div className="w-px h-6 bg-border hidden sm:block" />
+        <input
+          ref={fileInputRef}
+          type="file"
+          accept="image/*"
+          multiple
+          className="hidden"
+          onChange={handleFrameUpload}
+        />
+        <button
+          onClick={() => fileInputRef.current?.click()}
+          className="px-3 py-1.5 text-xs bg-white/[0.03] border border-border rounded-lg hover:bg-white/10 hover:border-primary/40 transition-all text-white/50 hover:text-white"
+        >
+          上传关键帧 ({frameFiles.length}/10)
+        </button>
       </div>
 
       <div className="flex-1 flex min-h-0 overflow-hidden">
@@ -268,12 +213,53 @@ export default function VideoStudio({ mode = 'text2video' }) {
               )}
             </>
           ) : generating ? (
-            <EmptyState icon="⏳" title="生成中..." description="视频生成需要较长时间，请耐心等待" />
+            <EmptyState icon="⏳" title="生成中..." description="插帧视频生成需要较长时间，请耐心等待" />
           ) : (
-            <EmptyState icon={cfg.icon} title={cfg.title} description={cfg.desc} />
+            <EmptyState
+              icon="🎞"
+              title="关键帧插帧"
+              description="上传多张关键帧图片，设置时间点和强度，AI 将生成平滑过渡视频"
+            />
           )}
 
-          <div className="w-full max-w-2xl flex flex-col gap-3">
+          {frameFiles.length > 0 && (
+            <div className="w-full max-w-2xl flex flex-wrap gap-2">
+              {frameFiles.map((file, i) => (
+                <div key={i} className="relative w-16 h-16 rounded-lg overflow-hidden border border-border group">
+                  <img src={previewUrls[i]} alt="" className="w-full h-full object-cover" />
+                  <button
+                    onClick={() => removeFrame(i)}
+                    className="absolute inset-0 bg-black/60 opacity-0 group-hover:opacity-100 flex items-center justify-center text-white text-xs transition-opacity"
+                  >
+                    ✕
+                  </button>
+                  <span className="absolute bottom-0 left-0 right-0 text-[8px] text-center bg-black/60 text-white/70">
+                    {i + 1}
+                  </span>
+                </div>
+              ))}
+            </div>
+          )}
+
+          {!currentResult && !generating && (
+            <div className="w-full max-w-2xl flex flex-col gap-3">
+              <div className="flex gap-3">
+                <input
+                  type="text"
+                  value={framePositions}
+                  onChange={e => setFramePositions(e.target.value)}
+                  placeholder="关键帧位置(%)，逗号分隔，如: 0, 25, 50, 75, 100"
+                  className="flex-1 bg-white/[0.03] border border-border rounded-xl px-4 py-2.5 text-sm text-white placeholder:text-white/15 focus:outline-none focus:ring-1 focus:ring-primary/30 focus:border-primary/30"
+                />
+                <input
+                  type="text"
+                  value={frameStrengths}
+                  onChange={e => setFrameStrengths(e.target.value)}
+                  placeholder="强度，逗号分隔，如: 1.0, 0.8, 0.8, 1.0"
+                  className="flex-1 bg-white/[0.03] border border-border rounded-xl px-4 py-2.5 text-sm text-white placeholder:text-white/15 focus:outline-none focus:ring-1 focus:ring-primary/30 focus:border-primary/30"
+                />
+              </div>
+
             {currentModel.supportsNegativePrompt && (
               <textarea
                 value={negativePrompt}
@@ -299,7 +285,7 @@ export default function VideoStudio({ mode = 'text2video' }) {
             <PromptInput
               value={prompt}
               onChange={setPrompt}
-              placeholder={cfg.promptPlaceholder}
+              placeholder="描述关键帧之间的过渡效果..."
               disabled={generating}
             />
 
@@ -333,12 +319,13 @@ export default function VideoStudio({ mode = 'text2video' }) {
                 <GenerateButton
                   onClick={handleGenerate}
                   loading={generating}
-                  disabled={!canGenerate}
-                  label={canGenerate ? cfg.btnLabel : cfg.btnDisabledLabel}
+                  disabled={!prompt.trim() || frameFiles.length === 0}
+                  label="生成插帧视频"
                 />
               )}
             </div>
-          </div>
+            </div>
+          )}
 
           {error && (
             <div className="px-4 py-2 bg-red-500/10 border border-red-500/20 rounded-lg animate-fade-in">

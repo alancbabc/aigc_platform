@@ -17,9 +17,20 @@ export const config = {
   JWT_EXPIRES_IN: '7d',
   BCRYPT_ROUNDS: 10,
   DATA_DIR: path.join(__dirname, 'data'),
-  // 自部署 AI 服务 (原 ai.gitee.com 第三方 API 已替换)
+
+  // AI 服务地址
   AI_IMAGE_URL: process.env.AI_IMAGE_URL || 'http://10.42.1.2:9000',
   AI_VIDEO_URL: process.env.AI_VIDEO_URL || 'http://10.42.1.2:8000',
   AI_TTS_URL: process.env.AI_TTS_URL || 'http://10.42.1.2:9200',
   AI_VOICE_URL: process.env.AI_VOICE_URL || 'http://10.42.1.2:9300',
+
+  // 轮询与超时配置
+  POLL_INTERVAL_MS: parseInt(process.env.POLL_INTERVAL_MS) || 20000,
+  MAX_POLL_ATTEMPTS: parseInt(process.env.MAX_POLL_ATTEMPTS) || 150,
+  SUBMIT_TIMEOUT_MS: parseInt(process.env.SUBMIT_TIMEOUT_MS) || 120000,
+  POLL_TIMEOUT_MS: parseInt(process.env.POLL_TIMEOUT_MS) || 10000,
+  DOWNLOAD_TIMEOUT_MS: parseInt(process.env.DOWNLOAD_TIMEOUT_MS) || 180000,
+  DOWNLOAD_RETRIES: parseInt(process.env.DOWNLOAD_RETRIES) || 3,
+  DOWNLOAD_RETRY_DELAY_MS: parseInt(process.env.DOWNLOAD_RETRY_DELAY_MS) || 5000,
+  POLL_TOTAL_TIMEOUT_MS: parseInt(process.env.POLL_TOTAL_TIMEOUT_MS) || 300000,
 };

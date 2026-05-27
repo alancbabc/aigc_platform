@@ -37,8 +37,13 @@ export default function App() {
       >
         <Route index element={<Navigate to="image" replace />} />
         <Route path="image" element={<DashboardPage type="image" />} />
+        <Route path="image-edit" element={<DashboardPage type="image-edit" />} />
         <Route path="video" element={<DashboardPage type="video" />} />
+        <Route path="image2video" element={<DashboardPage type="image2video" />} />
+        <Route path="a2v" element={<DashboardPage type="a2v" />} />
         <Route path="audio" element={<DashboardPage type="audio" />} />
+        <Route path="clone" element={<DashboardPage type="clone" />} />
+        <Route path="interpolation" element={<DashboardPage type="interpolation" />} />
         <Route path="history" element={<DashboardPage type="history" />} />
       </Route>
 

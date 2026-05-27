@@ -4,6 +4,7 @@ const typeConfig = {
   image: { icon: '🖼', label: '图片' },
   video: { icon: '🎬', label: '视频' },
   audio: { icon: '🎵', label: '音频' },
+  interpolation: { icon: '🎞', label: '插帧' },
 };
 
 export default function HistoryCard({ item, onClick, onDelete }) {
@@ -65,5 +66,5 @@ export default function HistoryCard({ item, onClick, onDelete }) {
 function formatDate(dateStr) {
   if (!dateStr) return '';
   const d = new Date(dateStr);
-  return `${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')} ${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`;
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')} ${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`;
 }

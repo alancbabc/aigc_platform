@@ -1,4 +1,5 @@
 import { createContext, useState, useEffect, useCallback } from 'react';
+import { apiPost } from '../api/client';
 
 export const AuthContext = createContext(null);
 
@@ -10,20 +11,42 @@ export function AuthProvider({ children }) {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    try {
-      const stored = localStorage.getItem(STORAGE_KEY);
-      if (stored) {
-        const { user, token } = JSON.parse(stored);
-        if (user && token) {
-          setUser(user);
-          setToken(token);
+    (async () => {
+      try {
+        const stored = localStorage.getItem(STORAGE_KEY);
+        if (stored) {
+          const { user, token: storedToken } = JSON.parse(stored);
+          if (user && storedToken) {
+            const res = await fetch('/api/history', {
+              headers: { Authorization: `Bearer ${storedToken}` },
+            });
+            if (res.status === 401) {
+              localStorage.removeItem(STORAGE_KEY);
+            } else if (!res.ok) {
+              setUser(user);
+              setToken(storedToken);
+            } else {
+              setUser(user);
+              setToken(storedToken);
+            }
+          }
         }
+      } catch {
+        // Network error — keep the token, try again next load
+        const stored = localStorage.getItem(STORAGE_KEY);
+        if (stored) {
+          try {
+            const { user, token: savedToken } = JSON.parse(stored);
+            if (user && savedToken) {
+              setUser(user);
+              setToken(savedToken);
+            }
+          } catch {}
+        }
+      } finally {
+        setLoading(false);
       }
-    } catch {
-      localStorage.removeItem(STORAGE_KEY);
-    } finally {
-      setLoading(false);
-    }
+    })();
   }, []);
 
   const saveAuth = useCallback((userData, authToken) => {
@@ -36,29 +59,13 @@ export function AuthProvider({ children }) {
   }, []);
 
   const login = useCallback(async (username, password) => {
-    const res = await fetch('/api/auth/login', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ username, password }),
-    });
-    const raw = await res.text().catch(() => '');
-    let data;
-    try { data = raw ? JSON.parse(raw) : {}; } catch { throw new Error(`Server error (${res.status})`); }
-    if (!res.ok) throw new Error(data.error || 'Login failed');
+    const data = await apiPost('/auth/login', { username, password });
     saveAuth(data.user, data.token);
     return data;
   }, [saveAuth]);
 
   const register = useCallback(async (username, password) => {
-    const res = await fetch('/api/auth/register', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ username, password }),
-    });
-    const raw = await res.text().catch(() => '');
-    let data;
-    try { data = raw ? JSON.parse(raw) : {}; } catch { throw new Error(`Server error (${res.status})`); }
-    if (!res.ok) throw new Error(data.error || 'Registration failed');
+    const data = await apiPost('/auth/register', { username, password });
     saveAuth(data.user, data.token);
     return data;
   }, [saveAuth]);

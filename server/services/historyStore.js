@@ -1,7 +1,7 @@
 import fs from 'fs';
 import path from 'path';
 import { config } from '../config.js';
-import { readJSON, writeJSON } from '../utils/fileStore.js';
+import { readJSON, lockedUpdate } from '../utils/fileStore.js';
 
 function getHistoryFile(username) {
   return path.join(config.DATA_DIR, 'history', `${username}.json`);
@@ -22,34 +22,45 @@ export function getHistory(username) {
 }
 
 export async function addHistory(username, entry) {
-  const history = readJSON(getHistoryFile(username)) || [];
   const newEntry = {
     id: generateId(),
     ...entry,
     createdAt: new Date().toISOString(),
   };
-  history.unshift(newEntry);
-  await writeJSON(getHistoryFile(username), history);
+
+  await lockedUpdate(getHistoryFile(username), (history) => {
+    const current = history || [];
+    current.unshift(newEntry);
+    return current;
+  });
+
   return newEntry;
 }
 
 export async function deleteHistory(username, id) {
-  const history = readJSON(getHistoryFile(username)) || [];
-  const entry = history.find(h => h.id === id);
-  if (!entry) return false;
+  let toDelete = [];
+  let found = false;
 
-  if (entry.results) {
-    for (const r of entry.results) {
-      const toDelete = r.filePath || (r.filename
-        ? path.join(config.DATA_DIR, 'outputs', username, r.filename)
-        : null);
-      if (toDelete) {
-        try { fs.unlinkSync(toDelete); } catch {}
-      }
+  await lockedUpdate(getHistoryFile(username), (history) => {
+    const current = history || [];
+    const entry = current.find(h => h.id === id);
+    if (!entry) return current;
+    found = true;
+    toDelete = entry.results || [];
+    return current.filter(h => h.id !== id);
+  });
+
+  if (!found) return false;
+
+  // Delete output files AFTER record is removed (safe: record gone, files best-effort)
+  for (const r of toDelete) {
+    const filePath = r.filePath || (r.filename
+      ? path.join(config.DATA_DIR, 'outputs', username, r.filename)
+      : null);
+    if (filePath) {
+      try { fs.unlinkSync(filePath); } catch {}
     }
   }
 
-  const filtered = history.filter(h => h.id !== id);
-  await writeJSON(getHistoryFile(username), filtered);
   return true;
 }

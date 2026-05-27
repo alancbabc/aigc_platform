@@ -4,12 +4,14 @@ import HistoryCard from './HistoryCard';
 import HistoryDetail from './HistoryDetail';
 import LoadingSpinner from '../common/LoadingSpinner';
 import EmptyState from '../common/EmptyState';
+import ConfirmModal from '../common/ConfirmModal';
 
 export default function HistoryGrid() {
   const [history, setHistory] = useState([]);
   const [loading, setLoading] = useState(true);
   const [filter, setFilter] = useState('all');
   const [selectedItem, setSelectedItem] = useState(null);
+  const [deleteConfirm, setDeleteConfirm] = useState(null);
   const [error, setError] = useState(null);
 
   const fetchHistory = useCallback(async () => {
@@ -34,6 +36,8 @@ export default function HistoryGrid() {
       if (selectedItem?.id === id) setSelectedItem(null);
     } catch (err) {
       setError(err.message);
+    } finally {
+      setDeleteConfirm(null);
     }
   };
 
@@ -46,6 +50,7 @@ export default function HistoryGrid() {
     { id: 'image', label: '图片' },
     { id: 'video', label: '视频' },
     { id: 'audio', label: '音频' },
+    { id: 'interpolation', label: '插帧' },
   ];
 
   if (loading) return <LoadingSpinner size="large" />;
@@ -73,6 +78,16 @@ export default function HistoryGrid() {
         <span className="text-xs text-white/30 ml-auto">{filtered.length} 条记录</span>
       </div>
 
+      {deleteConfirm && (
+        <ConfirmModal
+          title="确认删除"
+          message="删除后将无法恢复，包括生成的图片/视频/音频文件。确定要删除吗？"
+          confirmLabel="删除"
+          onConfirm={() => handleDelete(deleteConfirm)}
+          onCancel={() => setDeleteConfirm(null)}
+        />
+      )}
+
       {error && (
         <div className="px-4 py-2 bg-red-500/10 border border-red-500/20 rounded-lg mb-4">
           <p className="text-red-400 text-xs">{error}</p>
@@ -93,7 +108,7 @@ export default function HistoryGrid() {
                 key={item.id}
                 item={item}
                 onClick={() => setSelectedItem(item)}
-                onDelete={() => handleDelete(item.id)}
+                onDelete={() => setDeleteConfirm(item.id)}
               />
             ))}
           </div>
@@ -104,7 +119,7 @@ export default function HistoryGrid() {
         <HistoryDetail
           item={selectedItem}
           onClose={() => setSelectedItem(null)}
-          onDelete={() => handleDelete(selectedItem.id)}
+          onDelete={() => setDeleteConfirm(selectedItem.id)}
         />
       )}
     </div>

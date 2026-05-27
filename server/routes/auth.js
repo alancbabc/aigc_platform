@@ -29,13 +29,13 @@ authRouter.post('/register', async (req, res) => {
       return res.status(400).json({ error: 'Password must be at least 6 characters' });
     }
 
-    const existing = findUser(username);
-    if (existing) {
+    const passwordHash = await hashPassword(password);
+    const user = await createUser(username, passwordHash);
+
+    if (!user) {
       return res.status(409).json({ error: 'Username already exists' });
     }
 
-    const passwordHash = await hashPassword(password);
-    const user = await createUser(username, passwordHash);
     const token = signToken({ username: user.username });
 
     res.status(201).json({

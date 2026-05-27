@@ -17,6 +17,8 @@ const paramLabels = {
   text: '文本',
   emo_vector: '情绪向量',
   emo_text: '情绪参考文本',
+  gen_num: '生成数量',
+  keyframe_count: '关键帧数',
 };
 
 function formatParamValue(key, value) {
@@ -74,7 +76,7 @@ export default function HistoryDetail({ item, onClose, onDelete }) {
           {item.type === 'image' && resultUrl && (
             <img src={resultUrl} alt="" className="w-full max-h-[55vh] object-contain rounded-xl bg-black/20" />
           )}
-          {item.type === 'video' && resultUrl && (
+          {(item.type === 'video' || item.type === 'interpolation') && resultUrl && (
             <video src={resultUrl} controls className="w-full max-h-[55vh] rounded-xl bg-black" />
           )}
           {item.type === 'audio' && resultUrl && (

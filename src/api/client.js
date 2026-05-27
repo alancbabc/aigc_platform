@@ -1,3 +1,5 @@
+import { showToast } from '../components/common/Toast';
+
 const BASE_URL = '/api';
 
 export function getMediaUrl(url) {
@@ -12,7 +14,49 @@ export function getMediaUrl(url) {
   return url;
 }
 
-async function apiRequest(endpoint, options = {}) {
+function getToken() {
+  try {
+    const stored = localStorage.getItem('aigc_auth');
+    if (stored) return JSON.parse(stored).token || '';
+  } catch {}
+  return '';
+}
+
+export async function apiPost(endpoint, body) {
+  const res = await fetch(`/api${endpoint}`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      Authorization: `Bearer ${getToken()}`,
+    },
+    body: JSON.stringify(body),
+  });
+  const raw = await res.text().catch(() => '');
+  let data;
+  try { data = raw ? JSON.parse(raw) : {}; } catch { throw new Error(raw.slice(0, 200) || `Server error (${res.status})`); }
+  if (!res.ok) throw new Error(data.error || `Request failed (${res.status})`);
+  return data;
+}
+
+async function apiRequest(endpoint, options = {}, signal, retries = 2) {
+  let lastError;
+  for (let attempt = 0; attempt <= retries; attempt++) {
+    if (attempt > 0) {
+      await new Promise(r => setTimeout(r, 1000 * attempt));
+    }
+    try {
+      return await _doRequest(endpoint, options, signal);
+    } catch (err) {
+      lastError = err;
+      if (err.name === 'AbortError') throw err;
+      if (err.message === 'Session expired, please login again') throw err;
+      if (err.message?.startsWith?.('Server returned 4')) throw err;
+    }
+  }
+  throw lastError;
+}
+
+async function _doRequest(endpoint, options = {}, signal) {
   let token = '';
   try {
     const stored = localStorage.getItem('aigc_auth');
@@ -27,12 +71,14 @@ async function apiRequest(endpoint, options = {}) {
       ...(token ? { Authorization: `Bearer ${token}` } : {}),
       ...(options.headers || {}),
     },
+    signal,
     ...options,
   });
 
   if (res.status === 401) {
     localStorage.removeItem('aigc_auth');
-    window.location.href = '/login';
+    showToast('会话已过期，请重新登录', 'error', 0);
+    setTimeout(() => { window.location.href = '/login'; }, 1500);
     throw new Error('Session expired, please login again');
   }
 
@@ -51,25 +97,33 @@ async function apiRequest(endpoint, options = {}) {
   return data;
 }
 
-export const generateAPI = {
-  image: (params) =>
-    apiRequest('/generate/image', {
-      method: 'POST',
-      body: JSON.stringify(params),
-    }),
+export function createGenerationAPI(signal) {
+  return {
+    image: (params) =>
+      apiRequest('/generate/image', {
+        method: 'POST',
+        body: JSON.stringify(params),
+      }, signal),
 
-  video: (params) =>
-    apiRequest('/generate/video', {
-      method: 'POST',
-      body: JSON.stringify(params),
-    }),
+    video: (params) =>
+      apiRequest('/generate/video', {
+        method: 'POST',
+        body: JSON.stringify(params),
+      }, signal),
 
-  audio: (params) =>
-    apiRequest('/generate/audio', {
-      method: 'POST',
-      body: JSON.stringify(params),
-    }),
-};
+    audio: (params) =>
+      apiRequest('/generate/audio', {
+        method: 'POST',
+        body: JSON.stringify(params),
+      }, signal),
+
+    interpolation: (params) =>
+      apiRequest('/generate/interpolation', {
+        method: 'POST',
+        body: JSON.stringify(params),
+      }, signal),
+  };
+}
 
 export const historyAPI = {
   getAll: () => apiRequest('/history'),
