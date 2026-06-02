@@ -1,352 +1,76 @@
-import { useState, useCallback, useRef, useEffect } from 'react';
-import { createGenerationAPI, getMediaUrl } from '../../api/client';
+import { useState, useCallback, useEffect, useRef } from 'react';
+import { useLocation } from 'react-router-dom';
+import { createGenerationAPI } from '../../api/client';
 import { videoModels, getVideoModelById } from '../../data/models';
 import ModelDropdown from '../common/ModelDropdown';
 import SimpleDropdown from '../common/SimpleDropdown';
-import UploadButton from '../common/UploadButton';
-import PromptInput from '../common/PromptInput';
+import ImageUploader from '../common/ImageUploader';
+import AudioPicker from '../common/AudioPicker';
 import GenerateButton from '../common/GenerateButton';
-import EmptyState from '../common/EmptyState';
+import PromptInput from '../common/PromptInput';
+import PromptPanel from '../common/PromptPanel';
+import { showToast } from '../common/Toast';
 import { readFileAsBase64 } from '../../utils/fileHelpers';
-import { downloadResult } from '../../utils/download';
+import { useTasks } from '../../contexts/TaskContext';
 
-const MODE_CONFIG = {
-  text2video: {
-    badge: '文生视频',
-    badgeClass: 'bg-primary/10 text-primary border-primary/30',
-    icon: '🎬',
-    title: '文生视频',
-    desc: '输入 Prompt 描述视频内容，选择质量和参数，点击生成',
-    promptPlaceholder: '描述你想要生成的视频内容，例如：海滩上夕阳下的海浪...',
-    btnLabel: '生成视频',
-    btnDisabledLabel: '请输入 Prompt',
-    needsImage: false,
-    needsAudio: false,
-    showQuality: true,
-    canGenerate: (prompt) => !!prompt.trim(),
-  },
-  image2video: {
-    badge: '图生视频',
-    badgeClass: 'bg-purple-500/10 text-purple-400 border-purple-500/30',
-    icon: '🖼→🎬',
-    title: '图生视频',
-    desc: '上传一张参考图片，输入 Prompt，AI 将基于图片生成动态视频',
-    promptPlaceholder: '描述基于参考图想要生成的视频内容和动效...',
-    btnLabel: '生成视频',
-    btnDisabledLabel: '请上传参考图片并输入 Prompt',
-    needsImage: true,
-    needsAudio: false,
-    showQuality: false,
-    canGenerate: (prompt, hasImage) => !!prompt.trim() && hasImage,
-  },
-  a2v: {
-    badge: '音生视频',
-    badgeClass: 'bg-amber-500/10 text-amber-400 border-amber-500/30',
-    icon: '🎵→🎬',
-    title: '音频驱动视频',
-    desc: '上传一段音频，输入 Prompt，AI 将根据音频节奏驱动画面动效',
-    promptPlaceholder: '描述与音频氛围匹配的视频画面内容...',
-    btnLabel: '生成视频',
-    btnDisabledLabel: '请上传音频文件并输入 Prompt',
-    needsImage: false,
-    needsAudio: true,
-    showQuality: false,
-    canGenerate: (prompt, _, hasAudio) => !!prompt.trim() && hasAudio,
-  },
+const CFG = {
+  text2video: { ni: false, na: false, sq: true, can: (p) => !!p.trim(), btn: '生成视频', bo: '请输入 Prompt' },
+  image2video: { ni: true, na: false, sq: false, can: (p,i) => !!p.trim()&&i, btn: '生成视频', bo: '请上传图片并输入 Prompt' },
+  a2v: { ni: false, na: true, sq: false, can: (p,_,a) => !!p.trim()&&a, btn: '生成视频', bo: '请上传音频并输入 Prompt' },
 };
+let _vs=0;function _vid(){return `c_${Date.now()}_${++_vs}`;}
 
 export default function VideoStudio({ mode = 'text2video' }) {
-  const cfg = MODE_CONFIG[mode] || MODE_CONFIG.text2video;
+  const cfg=CFG[mode]||CFG.text2video;const{addTask,updateTask,optimizeOpen,setOptimizeOpen}=useTasks();const loc=useLocation();
+  const [sid,setSid]=useState(videoModels[0].id);const [ri,setRi]=useState(null);
+  const [prompt,setPrompt]=useState('');useEffect(()=>{if(loc.state?.reusePrompt)setPrompt(loc.state.reusePrompt)},[loc.key]);
+  const [np,setNp]=useState('text, subtitles, lower-third, chyron, nameplate, news broadcast, TV graphics, interview, breaking news banner, character introduction overlay, manga annotation, comic annotation, text bubble, lettering artifacts, on-screen text, kana, furigana, character card, profile card, vertical text, vertical subtitles, vertical title card');const [seed,setSeed]=useState('');
+  const [res,setRes]=useState(videoModels[0].defaultResolution);const [dur,setDur]=useState(videoModels[0].defaultDuration);
+  const [qual,setQual]=useState(videoModels[0].defaultQuality);
+  const [audio,setAudio]=useState(null);const [gn,setGn]=useState(1);
+  const [gc,setGc]=useState(0);const [err,setErr]=useState(null);
+  const cm=getVideoModelById(sid);const can=cfg.can(prompt,!!ri,!!audio);
+  const vcRef=useRef(0),vtRef=useRef(0);
+  const vbt=()=>{vcRef.current++;clearTimeout(vtRef.current);vtRef.current=setTimeout(()=>{showToast(`生成完成 (${vcRef.current} 个)`,'success');vcRef.current=0;},500);};
 
-  const [selectedModelId, setSelectedModelId] = useState(videoModels[0].id);
-  const [referenceImage, setReferenceImage] = useState(null);
-  const [prompt, setPrompt] = useState('');
-  const [negativePrompt, setNegativePrompt] = useState('');
-  const [seed, setSeed] = useState('');
-  const [resolution, setResolution] = useState(videoModels[0].defaultResolution);
-  const [duration, setDuration] = useState(videoModels[0].defaultDuration);
-  const [quality, setQuality] = useState(videoModels[0].defaultQuality);
-  const [enhancePrompt, setEnhancePrompt] = useState(false);
-  const [audioFile, setAudioFile] = useState(null);
-  const [genNum, setGenNum] = useState(1);
-  const [generating, setGenerating] = useState(false);
-  const [error, setError] = useState(null);
-  const [results, setResults] = useState(null);
-  const [selectedResultIdx, setSelectedResultIdx] = useState(0);
-
-  const abortRef = useRef(null);
-  const generatingRef = useRef(false);
-  const submitGuardRef = useRef(false);
-
-  useEffect(() => {
-    return () => abortRef.current?.abort();
-  }, []);
-
-  const currentModel = getVideoModelById(selectedModelId);
-  const modelResolutions = currentModel.resolutions || [];
-  const hasImage = !!referenceImage;
-  const hasAudio = !!audioFile;
-  const canGenerate = cfg.canGenerate(prompt, hasImage, hasAudio);
-
-  const handleCancel = useCallback(() => {
-    abortRef.current?.abort();
-  }, []);
-
-  const handleGenerate = useCallback(async () => {
-    if (!canGenerate) return;
-    if (submitGuardRef.current) return;
-    submitGuardRef.current = true;
-    abortRef.current = new AbortController();
-    generatingRef.current = true;
-    setGenerating(true);
-    setError(null);
-    setResults(null);
-    setSelectedResultIdx(0);
-    try {
-      let imageBase64 = undefined;
-      if (referenceImage) {
-        imageBase64 = await readFileAsBase64(referenceImage);
-      }
-      let audioBase64 = undefined;
-      if (audioFile) {
-        audioBase64 = await readFileAsBase64(audioFile);
-      }
-
-      const api = createGenerationAPI(abortRef.current.signal);
-      const data = await api.video({
-        model: currentModel,
-        prompt: prompt.trim(),
-        image_base64: imageBase64,
-        negative_prompt: negativePrompt.trim() || undefined,
-        seed: seed || undefined,
-        duration,
-        resolution,
-        quality: cfg.showQuality ? quality : undefined,
-        enhance_prompt: enhancePrompt,
-        audio_base64: audioBase64,
-        gen_num: genNum,
-      });
-      if (generatingRef.current) {
-        setResults(data.results);
-        if (data.errors) {
-          setError(`部分任务失败: ${data.errors.join('; ')}`);
-          setTimeout(() => setError(null), 10000);
-        }
-      }
-    } catch (err) {
-      if (err.name === 'AbortError') {
-        setError('已取消生成');
-      } else {
-        setError(err.message);
-      }
-      setTimeout(() => setError(null), 10000);
-    } finally {
-      setGenerating(false);
-      generatingRef.current = false;
-      abortRef.current = null;
-      submitGuardRef.current = false;
-    }
-  }, [prompt, negativePrompt, seed, currentModel, referenceImage, duration, resolution, quality, enhancePrompt, audioFile, genNum, canGenerate, cfg.showQuality]);
-
-  const handleDownload = (url) => downloadResult(url, 'generated.mp4');
-  const currentResult = results?.[selectedResultIdx];
+  const gen=useCallback(async(submitPrompt,submitNeg)=>{const p=submitPrompt||prompt;const n=submitNeg!==undefined?submitNeg:np;if(!p.trim())return;const tid=_vid();addTask({id:tid,generationId:tid,type:mode,prompt:p.trim(),model:cm.name,status:'generating',results:null,error:null});setGc(c=>c+1);setErr(null);showToast('任务已提交','info');
+    try{const ib=ri?await readFileAsBase64(ri):undefined;const ab=audio?await readFileAsBase64(audio):undefined;
+      const d=await createGenerationAPI().video({model:cm,mode,prompt:p.trim(),image_base64:ib,negative_prompt:n.trim()||undefined,seed:seed||undefined,duration:dur,resolution:res,quality:cfg.sq?qual:undefined,audio_base64:ab,gen_num:gn});
+      updateTask(tid,{generationId:d.generationId||tid,status:'done',results:d.results,duration:d.duration});vbt();
+      if(d.translatedPrompt&&d.translatedPrompt!==p.trim()&&prompt===p.trim())setPrompt(d.translatedPrompt);
+      if(d.translationStatus==='no_key')showToast('翻译功能不可用：未配置 Gitee API Key，使用原文生成','error',6000);
+      else if(d.translationStatus==='failed')showToast('Prompt 翻译失败，使用原文生成','error',6000);
+      if(d.errors){setErr(`部分失败: ${d.errors.join('; ')}`);setTimeout(()=>setErr(null),10000);}
+    }catch(e){updateTask(tid,{status:'failed',error:e.message});setErr(e.message);showToast(`失败: ${e.message}`,'error');setTimeout(()=>setErr(null),10000);}
+    finally{setGc(c=>c-1);}
+  },[prompt,np,seed,cm,ri,dur,res,qual,audio,gn,can,cfg.sq]);
 
   return (
-    <div className="h-full flex flex-col">
-      <div className="flex-shrink-0 px-6 py-4 flex items-center gap-3 border-b border-border flex-wrap">
-        <span className={`px-2 py-0.5 rounded-md text-[10px] font-bold border ${cfg.badgeClass}`}>
-          {cfg.badge}
-        </span>
-
-        <ModelDropdown
-          models={videoModels}
-          selectedModel={selectedModelId}
-          onSelect={(m) => setSelectedModelId(m.id)}
-        />
-
-        {cfg.showQuality && (
-          <SimpleDropdown
-            title="质量"
-            options={currentModel.qualities.map(q => q.name)}
-            selected={currentModel.qualities.find(q => q.id === quality)?.name || ''}
-            onSelect={(v) => {
-              const q = currentModel.qualities.find(q => q.name === v);
-              if (q) setQuality(q.id);
-            }}
-          />
-        )}
-
-        <SimpleDropdown
-          title="分辨率"
-          options={modelResolutions}
-          selected={resolution}
-          onSelect={setResolution}
-        />
-        <SimpleDropdown
-          title="时长"
-          options={currentModel.durations.map(String)}
-          selected={String(duration)}
-          onSelect={(v) => setDuration(parseInt(v))}
-        />
-
-        {cfg.needsImage && (
-          <>
-            <div className="w-px h-6 bg-border hidden sm:block" />
-            <div className="flex items-center gap-1">
-              <UploadButton
-                onUpload={(file) => setReferenceImage(file)}
-                onClear={() => setReferenceImage(null)}
-                accept="image/*"
-                label="上传参考图片"
-              />
-              {!hasImage && (
-                <span className="text-[10px] text-red-400/70 whitespace-nowrap">* 必传</span>
-              )}
-              {referenceImage && (
-                <span className="text-[11px] text-white/40 truncate max-w-[100px]">{referenceImage.name}</span>
-              )}
-            </div>
-          </>
-        )}
-
-        {cfg.needsAudio && (
-          <>
-            <div className="w-px h-6 bg-border hidden sm:block" />
-            <div className="flex items-center gap-1">
-              <UploadButton
-                onUpload={(file) => setAudioFile(file)}
-                onClear={() => setAudioFile(null)}
-                accept="audio/*"
-                label="上传音频文件"
-                icon={(
-                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                    <path d="M9 18V5l12-2v13" /><circle cx="6" cy="18" r="3" /><circle cx="18" cy="16" r="3" />
-                  </svg>
-                )}
-              />
-              {!hasAudio && (
-                <span className="text-[10px] text-red-400/70 whitespace-nowrap">* 必传</span>
-              )}
-              {audioFile && (
-                <span className="text-[11px] text-white/40 truncate max-w-[100px]">{audioFile.name}</span>
-              )}
-            </div>
-          </>
-        )}
-      </div>
-
-      <div className="flex-1 flex min-h-0 overflow-hidden">
-        <div className="flex-1 flex flex-col items-center justify-center gap-6 p-8 overflow-y-auto">
-          {currentResult ? (
-            <>
-              <div className="max-w-2xl w-full aspect-video rounded-2xl overflow-hidden border border-border bg-white/[0.02] relative group">
-                <video src={getMediaUrl(currentResult.url)} controls autoPlay loop muted className="w-full h-full object-contain" />
-                <div className="absolute top-2 right-2 opacity-0 group-hover:opacity-100 transition-opacity">
-                  <button onClick={() => handleDownload(currentResult.url)}
-                    className="px-3 py-1.5 bg-white/10 backdrop-blur-sm rounded-lg text-xs text-white hover:bg-white/20 transition-colors">
-                    下载
-                  </button>
-                </div>
-              </div>
-              {results && results.length > 1 && (
-                <div className="flex items-center gap-2">
-                  {results.map((r, i) => (
-                    <button
-                      key={i}
-                      onClick={() => setSelectedResultIdx(i)}
-                      className={`w-8 h-8 rounded-lg text-xs font-bold transition-all ${
-                        i === selectedResultIdx
-                          ? 'bg-primary/20 text-primary border border-primary/30'
-                          : 'bg-white/5 text-white/40 border border-transparent hover:bg-white/10'
-                      }`}
-                    >
-                      {i + 1}
-                    </button>
-                  ))}
-                  <span className="text-[10px] text-white/30 ml-1">共 {results.length} 个</span>
-                </div>
-              )}
-            </>
-          ) : generating ? (
-            <EmptyState icon="⏳" title="生成中..." description="视频生成需要较长时间，请耐心等待" />
-          ) : (
-            <EmptyState icon={cfg.icon} title={cfg.title} description={cfg.desc} />
-          )}
-
-          <div className="w-full max-w-2xl flex flex-col gap-3">
-            {currentModel.supportsNegativePrompt && (
-              <textarea
-                value={negativePrompt}
-                onChange={e => setNegativePrompt(e.target.value)}
-                placeholder="负向提示词（可选）：描述你不想要的内容..."
-                rows={1}
-                disabled={generating}
-                className="w-full bg-white/[0.03] border border-border rounded-xl px-4 py-2 text-sm text-white placeholder:text-white/15 focus:outline-none focus:ring-1 focus:ring-primary/30 focus:border-primary/30 resize-none"
-              />
-            )}
-
-            {currentModel.supportsSeed && (
-              <input
-                type="number"
-                value={seed}
-                onChange={e => setSeed(e.target.value)}
-                placeholder="Seed（留空随机）"
-                disabled={generating}
-                className="w-full bg-white/[0.03] border border-border rounded-xl px-4 py-2.5 text-sm text-white placeholder:text-white/15 focus:outline-none focus:ring-1 focus:ring-primary/30 focus:border-primary/30"
-              />
-            )}
-
-            <PromptInput
-              value={prompt}
-              onChange={setPrompt}
-              placeholder={cfg.promptPlaceholder}
-              disabled={generating}
-            />
-
-            <div className="flex items-center gap-3">
-              {currentModel.supportsEnhancePrompt && (
-                <label className="flex items-center gap-2 cursor-pointer">
-                  <input
-                    type="checkbox"
-                    checked={enhancePrompt}
-                    onChange={e => setEnhancePrompt(e.target.checked)}
-                    className="w-4 h-4 rounded border-border bg-white/[0.03] text-primary focus:ring-primary/30"
-                  />
-                  <span className="text-xs text-white/50">增强提示词</span>
-                </label>
-              )}
-
-              <SimpleDropdown
-                title="数量"
-                options={['1', '2', '4']}
-                selected={String(genNum)}
-                onSelect={(v) => setGenNum(parseInt(v))}
-              />
-              {generating ? (
-                <button
-                  onClick={handleCancel}
-                  className="px-4 py-2.5 rounded-xl text-xs font-bold bg-red-500/20 text-red-400 border border-red-500/30 hover:bg-red-500/30 transition-all"
-                >
-                  取消生成
-                </button>
-              ) : (
-                <GenerateButton
-                  onClick={handleGenerate}
-                  loading={generating}
-                  disabled={!canGenerate}
-                  label={canGenerate ? cfg.btnLabel : cfg.btnDisabledLabel}
-                />
-              )}
-            </div>
+    <div className="h-full flex overflow-hidden">
+      <div className="flex-1 flex flex-col overflow-hidden min-w-0">
+        {gc>0&&(<div className="flex-shrink-0 mx-3 mt-3 px-2 py-1 bg-primary/10 border border-primary/20 rounded-md flex items-center gap-1.5"><div className="w-2.5 h-2.5 border-2 border-white/10 border-t-primary rounded-full animate-spin"/><span className="text-[10px] text-primary font-medium">生成中 ({gc})</span></div>)}
+        <div className="flex-1 flex flex-col min-h-0 p-4 gap-3">
+          <div className="flex items-center gap-2 flex-wrap">
+            <ModelDropdown models={videoModels} selectedModel={sid} onSelect={(m)=>setSid(m.id)}/>
+            {cfg.sq&&<SimpleDropdown title="质量" options={cm.qualities.map(q=>q.name)} selected={cm.qualities.find(q=>q.id===qual)?.name||''} onSelect={(v)=>{const q=cm.qualities.find(q=>q.name===v);if(q)setQual(q.id);}}/>}
+            <SimpleDropdown title="分辨率" options={cm.resolutions} selected={res} onSelect={setRes}/>
+            <SimpleDropdown title="时长" options={cm.durations.map(String)} selected={String(dur)} onSelect={(v)=>setDur(parseInt(v))}/>
           </div>
-
-          {error && (
-            <div className="px-4 py-2 bg-red-500/10 border border-red-500/20 rounded-lg animate-fade-in">
-              <p className="text-red-400 text-xs">{error}</p>
-            </div>
-          )}
+          {cfg.ni&&<ImageUploader file={ri} onUpload={setRi} onClear={()=>setRi(null)}/>}
+          {cfg.na&&<AudioPicker file={audio} onUpload={setAudio} onClear={()=>setAudio(null)}/>}
+          {cm.supportsNegativePrompt&&<textarea value={np} onChange={e=>setNp(e.target.value)} placeholder="负向提示词（可选）" rows={4} className="w-full bg-white/[0.03] border border-border rounded-lg px-3 py-2 text-sm text-white placeholder:text-white/15 focus:outline-none focus:ring-1 focus:ring-primary/30 resize-none overflow-hidden"/>}
+          <PromptInput value={prompt} onChange={setPrompt} placeholder={mode==='a2v'?'描述与音频匹配的视频画面...':cfg.ni?'描述基于图片的视频动效...':'描述想要的视频内容。选择模型、质量、分辨率，点击「生成视频」'}/>
+          <div className="mt-auto flex items-center gap-2">
+            <button onClick={()=>setOptimizeOpen(!optimizeOpen)} className={`px-3 py-1.5 rounded-lg text-xs border transition-all ${optimizeOpen?'bg-primary/10 text-primary border-primary/30':'bg-white/[0.03] text-white/40 border-border hover:text-white hover:bg-white/10'}`}>
+              {optimizeOpen?'关闭优化':'优化 Prompt'}
+            </button>
+            <SimpleDropdown title="数量" options={['1','2','4']} selected={String(gn)} onSelect={(v)=>setGn(parseInt(v))}/>
+            <GenerateButton onClick={()=>gen()} disabled={!can} label={can?cfg.btn:cfg.bo}/>
+          </div>
+          {err&&<div className="px-2 py-1 bg-red-500/10 border border-red-500/20 rounded-md"><p className="text-red-400 text-[10px]">{err}</p></div>}
         </div>
       </div>
+      {optimizeOpen&&<PromptPanel prompt={prompt} type="video" onApply={(p)=>{setPrompt(p);}} onClose={()=>setOptimizeOpen(false)}/>}
     </div>
   );
 }

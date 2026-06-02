@@ -4,7 +4,17 @@ import { hashPassword, comparePassword } from '../utils/crypto.js';
 import { signToken } from '../utils/token.js';
 import { findUser, createUser } from '../services/userStore.js';
 
-const authLimiter = rateLimit({
+const USERNAME_REGEX = /^[a-zA-Z0-9_-]{3,30}$/;
+
+const registerLimiter = rateLimit({
+  windowMs: 60 * 60 * 1000,
+  max: 5,
+  message: { error: 'Too many registrations, please try again later' },
+  standardHeaders: true,
+  legacyHeaders: false,
+});
+
+const loginLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,
   max: 20,
   message: { error: 'Too many attempts, please try again after 15 minutes' },
@@ -13,19 +23,18 @@ const authLimiter = rateLimit({
 });
 
 export const authRouter = Router();
-authRouter.use(authLimiter);
 
-authRouter.post('/register', async (req, res) => {
+authRouter.post('/register', registerLimiter, async (req, res) => {
   try {
     const { username, password } = req.body;
 
     if (!username || !password) {
       return res.status(400).json({ error: 'Username and password are required' });
     }
-    if (username.length < 3 || username.length > 30) {
-      return res.status(400).json({ error: 'Username must be 3-30 characters' });
+    if (typeof username !== 'string' || !USERNAME_REGEX.test(username)) {
+      return res.status(400).json({ error: 'Username must be 3-30 characters (letters, numbers, underscore, hyphen)' });
     }
-    if (password.length < 6) {
+    if (typeof password !== 'string' || password.length < 6) {
       return res.status(400).json({ error: 'Password must be at least 6 characters' });
     }
 
@@ -49,7 +58,7 @@ authRouter.post('/register', async (req, res) => {
   }
 });
 
-authRouter.post('/login', async (req, res) => {
+authRouter.post('/login', loginLimiter, async (req, res) => {
   try {
     const { username, password } = req.body;
 

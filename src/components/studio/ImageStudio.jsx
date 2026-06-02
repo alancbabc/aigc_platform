@@ -1,292 +1,58 @@
-import { useState, useCallback, useRef, useEffect } from 'react';
+import { useState, useCallback, useEffect, useRef } from 'react';
+import { useLocation } from 'react-router-dom';
 import { createGenerationAPI } from '../../api/client';
 import { imageModels, getImageModelById } from '../../data/models';
 import ModelDropdown from '../common/ModelDropdown';
 import SimpleDropdown from '../common/SimpleDropdown';
-import UploadButton from '../common/UploadButton';
+import ImageUploader from '../common/ImageUploader';
 import PromptInput from '../common/PromptInput';
 import GenerateButton from '../common/GenerateButton';
-import ResultDisplay from '../common/ResultDisplay';
-import EmptyState from '../common/EmptyState';
+import PromptPanel from '../common/PromptPanel';
+import { showToast } from '../common/Toast';
 import { readFileAsBase64 } from '../../utils/fileHelpers';
-import { downloadResult } from '../../utils/download';
+import { useTasks } from '../../contexts/TaskContext';
+
+let _ts=0;function _tid(){return `c_${Date.now()}_${++_ts}`;}
 
 export default function ImageStudio({ mode = 'text2image' }) {
-  const isEditMode = mode === 'image2image';
+  const ie=mode==='image2image';const{addTask,updateTask,optimizeOpen,setOptimizeOpen}=useTasks();const loc=useLocation();
+  const [sid,setSid]=useState(ie?imageModels[1].id:imageModels[0].id);const [size,setSize]=useState(imageModels[0].defaultSize);
+  const [refImgs,setRefImgs]=useState([]);const [prompt,setPrompt]=useState('');useEffect(()=>{if(loc.state?.reusePrompt)setPrompt(loc.state.reusePrompt)},[loc.key]);
+  const [np,setNp]=useState('low quality, blurry, distorted, deformed, bad anatomy, extra limbs, watermark, text, signature');const [seed,setSeed]=useState('');
+  const [steps,setSteps]=useState(imageModels[0].defaultInferenceSteps);const [gn,setGn]=useState(1);
+  const [gc,setGc]=useState(0);const [err,setErr]=useState(null);
+  const cm=getImageModelById(sid);const can=ie?(prompt.trim()&&refImgs.length>0):!!prompt.trim();
+  const tcRef=useRef(0),ttRef=useRef(0);
+  const bt=()=>{tcRef.current++;clearTimeout(ttRef.current);ttRef.current=setTimeout(()=>{showToast(`生成完成 (${tcRef.current} 个)`,'success');tcRef.current=0;},500);};
 
-  const [selectedModelId, setSelectedModelId] = useState(imageModels[0].id);
-  const [selectedSize, setSelectedSize] = useState(imageModels[0].defaultSize);
-  const [referenceImages, setReferenceImages] = useState([]);
-  const [prompt, setPrompt] = useState('');
-  const [negativePrompt, setNegativePrompt] = useState('');
-  const [seed, setSeed] = useState('');
-  const [inferenceSteps, setInferenceSteps] = useState(imageModels[0].defaultInferenceSteps);
-  const [genNum, setGenNum] = useState(1);
-  const [generating, setGenerating] = useState(false);
-  const [error, setError] = useState(null);
-  const [results, setResults] = useState(null);
-  const [selectedResultIdx, setSelectedResultIdx] = useState(0);
-
-  const abortRef = useRef(null);
-  const generatingRef = useRef(false);
-  const submitGuardRef = useRef(false);
-
-  useEffect(() => {
-    return () => abortRef.current?.abort();
-  }, []);
-
-  const currentModel = getImageModelById(selectedModelId);
-  const sizes = currentModel.sizes || [];
-  const hasRefImage = referenceImages.length > 0;
-  const canGenerate = isEditMode ? (prompt.trim() && hasRefImage) : !!prompt.trim();
-
-  const handleModelSelect = useCallback((model) => {
-    setSelectedModelId(model.id);
-  }, []);
-
-  const handleCancel = useCallback(() => {
-    abortRef.current?.abort();
-  }, []);
-
-  const handleGenerate = useCallback(async () => {
-    if (!canGenerate) {
-      setError(isEditMode ? '请输入 Prompt 并上传至少一张参考图片' : '请输入 Prompt 描述');
-      return;
-    }
-    if (submitGuardRef.current) return;
-    submitGuardRef.current = true;
-    abortRef.current = new AbortController();
-    generatingRef.current = true;
-    setGenerating(true);
-    setError(null);
-    setResults(null);
-    setSelectedResultIdx(0);
-
-    try {
-      let imagesBase64 = undefined;
-      if (referenceImages.length > 0) {
-        imagesBase64 = await Promise.all(referenceImages.map(f => readFileAsBase64(f)));
-      }
-
-      const api = createGenerationAPI(abortRef.current.signal);
-      const data = await api.image({
-        model: currentModel,
-        prompt: prompt.trim(),
-        size: selectedSize,
-        images: imagesBase64,
-        negative_prompt: negativePrompt.trim() || undefined,
-        seed: seed || undefined,
-        num_inference_steps: inferenceSteps,
-        gen_num: genNum,
-      });
-      if (generatingRef.current) {
-        setResults(data.results);
-        if (data.errors) {
-          setError(`部分任务失败: ${data.errors.join('; ')}`);
-          setTimeout(() => setError(null), 10000);
-        }
-      }
-    } catch (err) {
-      if (err.name === 'AbortError') {
-        setError('已取消生成');
-      } else {
-        setError(err.message);
-      }
-      setTimeout(() => setError(null), 10000);
-    } finally {
-      setGenerating(false);
-      generatingRef.current = false;
-      abortRef.current = null;
-      submitGuardRef.current = false;
-    }
-  }, [prompt, negativePrompt, seed, inferenceSteps, currentModel, selectedSize, referenceImages, genNum, canGenerate, isEditMode]);
-
-  const handleDownload = (url) => downloadResult(url, 'generated.png');
-
-  const currentResult = results?.[selectedResultIdx];
-
-  const emptyIcon = isEditMode ? '✏️' : '🖼';
-  const emptyTitle = isEditMode ? '图片编辑' : '开始创作';
-  const emptyDesc = isEditMode
-    ? '上传参考图片，输入编辑指令，AI 将根据指令修改图片'
-    : '输入 Prompt，选择模型和尺寸，点击生成';
-  const promptPlaceholder = isEditMode
-    ? '描述你希望对参考图片进行的修改，例如：把猫换成狗、将背景变成海滩...'
-    : '描述你想要生成的画面，例如：一只在夕阳下奔跑的赛博朋克猫...';
-  const genButtonLabel = isEditMode ? '开始编辑' : '生成图片';
-  const genDisabledLabel = isEditMode ? '请上传图片并输入指令' : '输入 Prompt';
+  const gen=useCallback(async(sp, sn)=>{const p=sp||prompt;const n=sn!==undefined?sn:np;if(!(ie?(p.trim()&&refImgs.length>0):!!p.trim()))return;const tid=_tid();addTask({id:tid,generationId:tid,type:ie?'image-edit':'image',prompt:p.trim(),model:cm.name,status:'generating',results:null,error:null});setGc(c=>c+1);setErr(null);showToast('任务已提交','info');
+    try{let ib;if(refImgs.length>0)ib=await Promise.all(refImgs.map(f=>readFileAsBase64(f)));const d=await createGenerationAPI().image({model:cm,mode:ie?'image-edit':'image',prompt:p.trim(),size,images:ib,negative_prompt:n.trim()||undefined,seed:seed||undefined,num_inference_steps:steps,gen_num:gn});updateTask(tid,{generationId:d.generationId||tid,status:'done',results:d.results,duration:d.duration});bt();if(d.errors){setErr(`部分失败: ${d.errors.join('; ')}`);setTimeout(()=>setErr(null),10000);}}
+    catch(e){updateTask(tid,{status:'failed',error:e.message});setErr(e.message);showToast(`失败: ${e.message}`,'error');setTimeout(()=>setErr(null),10000);}finally{setGc(c=>c-1);}
+  },[prompt,np,seed,steps,cm,size,refImgs,gn,can,ie]);
 
   return (
-    <div className="h-full flex flex-col">
-      <div className="flex-shrink-0 px-6 py-4 flex items-center gap-3 border-b border-border flex-wrap">
-        <div className="flex items-center gap-2">
-          <span className={`px-2 py-0.5 rounded-md text-[10px] font-bold border ${
-            isEditMode
-              ? 'bg-purple-500/10 text-purple-400 border-purple-500/30'
-              : 'bg-primary/10 text-primary border-primary/30'
-          }`}>
-            {isEditMode ? '图片编辑' : '文生图'}
-          </span>
-        </div>
-
-        <ModelDropdown
-          models={imageModels}
-          selectedModel={selectedModelId}
-          onSelect={handleModelSelect}
-        />
-        <SimpleDropdown
-          title="尺寸"
-          options={sizes}
-          selected={selectedSize}
-          onSelect={setSelectedSize}
-        />
-        {currentModel.supportsInferenceSteps && (
-          <SimpleDropdown
-            title="推理步数"
-            options={currentModel.inferenceStepOptions.map(String)}
-            selected={String(inferenceSteps)}
-            onSelect={(v) => setInferenceSteps(parseInt(v))}
-          />
-        )}
-        {isEditMode && (
-          <>
-            <div className="w-px h-6 bg-border hidden sm:block" />
-            <div className="flex items-center gap-1">
-              <UploadButton
-                onUpload={(file) => setReferenceImages(prev => [...prev, file])}
-                onClear={() => setReferenceImages([])}
-                accept="image/*"
-                label="上传编辑图片"
-              />
-              {!hasRefImage && (
-                <span className="text-[10px] text-red-400/70 whitespace-nowrap">* 必传</span>
-              )}
-              {referenceImages.length > 0 && (
-                <div className="flex items-center gap-1">
-                  {referenceImages.map((img, idx) => (
-                    <span key={idx} className="relative inline-flex items-center gap-1 bg-white/[0.03] border border-border rounded px-1.5 py-0.5">
-                      <span className="text-[10px] text-white/40 truncate max-w-[50px]">{img.name}</span>
-                      <button
-                        onClick={() => setReferenceImages(prev => prev.filter((_, i) => i !== idx))}
-                        className="text-white/30 hover:text-red-400 text-[10px]"
-                      >
-                        ✕
-                      </button>
-                    </span>
-                  ))}
-                  <span className="text-[10px] text-white/20 ml-1">{referenceImages.length} 张</span>
-                </div>
-              )}
-            </div>
-          </>
-        )}
-      </div>
-
-      <div className="flex-1 flex min-h-0 overflow-hidden">
-        <div className="flex-1 flex flex-col items-center justify-center gap-6 p-8 overflow-y-auto">
-          {currentResult ? (
-            <>
-              <ResultDisplay url={currentResult.url} type="image" onDownload={() => handleDownload(currentResult.url)} />
-              {results && results.length > 1 && (
-                <div className="flex items-center gap-2">
-                  {results.map((r, i) => (
-                    <button
-                      key={i}
-                      onClick={() => setSelectedResultIdx(i)}
-                      className={`w-8 h-8 rounded-lg text-xs font-bold transition-all ${
-                        i === selectedResultIdx
-                          ? 'bg-primary/20 text-primary border border-primary/30'
-                          : 'bg-white/5 text-white/40 border border-transparent hover:bg-white/10'
-                      }`}
-                    >
-                      {i + 1}
-                    </button>
-                  ))}
-                  <span className="text-[10px] text-white/30 ml-1">共 {results.length} 张</span>
-                </div>
-              )}
-            </>
-          ) : generating ? (
-            <EmptyState icon="⏳" title="生成中..." description="AI 正在为您创作图片，请稍候" />
-          ) : (
-            <EmptyState icon={emptyIcon} title={emptyTitle} description={emptyDesc} />
-          )}
-
-          {isEditMode && !currentResult && !generating && hasRefImage && (
-            <div className="w-full max-w-2xl flex flex-wrap gap-2">
-              {referenceImages.map((img, idx) => (
-                <div key={idx} className="relative w-16 h-16 rounded-lg overflow-hidden border border-border group">
-                  <img src={URL.createObjectURL(img)} alt="" className="w-full h-full object-cover" />
-                  <span className="absolute bottom-0 left-0 right-0 text-[8px] text-center bg-black/60 text-white/70 py-0.5">
-                    参考 {idx + 1}
-                  </span>
-                </div>
-              ))}
-            </div>
-          )}
-
-          <div className="w-full max-w-2xl flex flex-col gap-3">
-            {currentModel.supportsNegativePrompt && (
-              <textarea
-                value={negativePrompt}
-                onChange={e => setNegativePrompt(e.target.value)}
-                placeholder="负向提示词（可选）：描述你不想要的内容..."
-                rows={1}
-                disabled={generating}
-                className="w-full bg-white/[0.03] border border-border rounded-xl px-4 py-2 text-sm text-white placeholder:text-white/15 focus:outline-none focus:ring-1 focus:ring-primary/30 focus:border-primary/30 resize-none"
-              />
-            )}
-
-            <PromptInput
-              value={prompt}
-              onChange={setPrompt}
-              placeholder={promptPlaceholder}
-              disabled={generating}
-            />
-
-            <div className="flex items-center gap-3">
-              {currentModel.supportsSeed && (
-                <input
-                  type="number"
-                  value={seed}
-                  onChange={e => setSeed(e.target.value)}
-                  placeholder="Seed（留空随机）"
-                  disabled={generating}
-                  className="w-40 bg-white/[0.03] border border-border rounded-xl px-4 py-2.5 text-sm text-white placeholder:text-white/15 focus:outline-none focus:ring-1 focus:ring-primary/30 focus:border-primary/30"
-                />
-              )}
-
-              <SimpleDropdown
-                title="数量"
-                options={['1', '2', '4']}
-                selected={String(genNum)}
-                onSelect={(v) => setGenNum(parseInt(v))}
-              />
-              {generating ? (
-                <button
-                  onClick={handleCancel}
-                  className="px-4 py-2.5 rounded-xl text-xs font-bold bg-red-500/20 text-red-400 border border-red-500/30 hover:bg-red-500/30 transition-all"
-                >
-                  取消生成
-                </button>
-              ) : (
-                <GenerateButton
-                  onClick={handleGenerate}
-                  loading={generating}
-                  disabled={!canGenerate}
-                  label={canGenerate ? genButtonLabel : genDisabledLabel}
-                />
-              )}
-            </div>
+    <div className="h-full flex overflow-hidden">
+      <div className="flex-1 flex flex-col overflow-hidden min-w-0">
+        {gc>0&&(<div className="flex-shrink-0 mx-3 mt-3 px-2 py-1 bg-primary/10 border border-primary/20 rounded-md flex items-center gap-1.5"><div className="w-2.5 h-2.5 border-2 border-white/10 border-t-primary rounded-full animate-spin"/><span className="text-[10px] text-primary font-medium">生成中 ({gc})</span></div>)}
+        <div className="flex-1 flex flex-col min-h-0 p-4 gap-3">
+          <div className="flex items-center gap-2 flex-wrap">
+            <ModelDropdown models={imageModels.filter(m=>ie?m.id==='Qwen-Image-Edit':m.id==='Qwen-Image')} selectedModel={sid} onSelect={(m)=>setSid(m.id)}/>
+            <SimpleDropdown title="尺寸" options={cm.sizes} selected={size} onSelect={setSize}/>
           </div>
-
-          {error && (
-            <div className="px-4 py-2 bg-red-500/10 border border-red-500/20 rounded-lg animate-fade-in">
-              <p className="text-red-400 text-xs">{error}</p>
-            </div>
-          )}
+          {ie&&<ImageUploader file={refImgs[0]} onUpload={(f)=>setRefImgs([f])} onClear={()=>setRefImgs([])} label="上传参考图片"/>}
+          {cm.supportsNegativePrompt&&<textarea value={np} onChange={e=>setNp(e.target.value)} placeholder="负向提示词（可选）" rows={4} className="w-full bg-white/[0.03] border border-border rounded-lg px-3 py-2 text-sm text-white placeholder:text-white/15 focus:outline-none focus:ring-1 focus:ring-primary/30 resize-none overflow-hidden"/>}
+          <PromptInput value={prompt} onChange={setPrompt} placeholder={ie?'描述您希望对图片进行的修改...':'描述您想要生成的内容。选择模型和尺寸，点击「生成图片」'}/>
+          <div className="mt-auto flex items-center gap-2">
+            <button onClick={()=>setOptimizeOpen(!optimizeOpen)} className={`px-3 py-1.5 rounded-lg text-xs border transition-all ${optimizeOpen?'bg-primary/10 text-primary border-primary/30':'bg-white/[0.03] text-white/40 border-border hover:text-white hover:bg-white/10'}`}>
+              {optimizeOpen?'关闭优化':'优化 Prompt'}
+            </button>
+            <SimpleDropdown title="数量" options={['1','2','4']} selected={String(gn)} onSelect={(v)=>setGn(parseInt(v))}/>
+            <GenerateButton onClick={()=>gen()} disabled={!can} label={can?(ie?'开始编辑':'生成图片'):ie?'请上传参考图片并输入提示词':'输入 Prompt'}/>
+          </div>
+          {err&&<div className="px-2 py-1 bg-red-500/10 border border-red-500/20 rounded-md"><p className="text-red-400 text-[10px]">{err}</p></div>}
         </div>
       </div>
+      {optimizeOpen&&<PromptPanel prompt={prompt} type="image" onApply={(p)=>{setPrompt(p);}} onClose={()=>setOptimizeOpen(false)}/>}
     </div>
   );
 }

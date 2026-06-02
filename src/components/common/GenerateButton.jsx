@@ -1,6 +1,7 @@
 export default function GenerateButton({ onClick, loading, disabled, label = '生成' }) {
   return (
     <button
+      type="button"
       onClick={onClick}
       disabled={disabled || loading}
       className={`relative px-8 py-3 rounded-xl font-bold text-sm transition-all active:scale-[0.97] ${

@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { Outlet, useNavigate, useLocation } from 'react-router-dom';
 import { useAuth } from '../hooks/useAuth';
+import RightPanel from '../components/panel/RightPanel';
 
 const NAV_ITEMS = [
   { id: 'image',   label: '文生图片', icon: (
@@ -123,9 +124,11 @@ export default function DashboardLayout() {
         </button>
       </aside>
 
-      <main className="flex-1 min-w-0 overflow-hidden">
+      <main className="w-1/2 min-w-0 overflow-hidden">
         <Outlet />
       </main>
+
+      <RightPanel />
     </div>
   );
 }

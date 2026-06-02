@@ -7,7 +7,7 @@ export function showToast(message, type = 'info', duration = 4000) {
     setToastsFn(prev => [...prev, { id, message, type }]);
     if (duration > 0) {
       setTimeout(() => {
-        setToastsFn(prev => prev.filter(t => t.id !== id));
+        setToastsFn?.(prev => prev.filter(t => t.id !== id));
       }, duration);
     }
   }

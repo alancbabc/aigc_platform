@@ -9,7 +9,6 @@ const paramLabels = {
   num_inference_steps: '推理步数',
   seed: '种子',
   pipeline_name: '流水线',
-  enhance_prompt: '增强提示词',
   has_reference_image: '参考图',
   language: '语言',
   speaker: '音色',
@@ -23,7 +22,7 @@ const paramLabels = {
 
 function formatParamValue(key, value) {
   if (value === null || value === undefined || value === '') return '-';
-  if (key === 'enhance_prompt' || key === 'has_reference_image') {
+  if (key === 'has_reference_image') {
     return value ? '是' : '否';
   }
   if (key === 'emo_vector' && Array.isArray(value)) {
@@ -73,13 +72,13 @@ export default function HistoryDetail({ item, onClose, onDelete }) {
         </div>
 
         <div className="flex-1 overflow-auto p-6">
-          {item.type === 'image' && resultUrl && (
+          {['image', 'image-edit', 'text2image'].includes(item.type) && resultUrl && (
             <img src={resultUrl} alt="" className="w-full max-h-[55vh] object-contain rounded-xl bg-black/20" />
           )}
-          {(item.type === 'video' || item.type === 'interpolation') && resultUrl && (
+          {['video', 'interpolation', 'image2video', 'a2v', 'text2video'].includes(item.type) && resultUrl && (
             <video src={resultUrl} controls className="w-full max-h-[55vh] rounded-xl bg-black" />
           )}
-          {item.type === 'audio' && resultUrl && (
+          {['audio', 'clone', 'speech'].includes(item.type) && resultUrl && (
             <div className="flex flex-col items-center gap-4 py-6">
               <div className="w-24 h-24 bg-primary/10 rounded-3xl flex items-center justify-center text-5xl">
                 🎵

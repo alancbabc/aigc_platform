@@ -1,14 +1,21 @@
-import { useRef } from 'react';
+import { useRef, useEffect } from 'react';
 
 export default function PromptInput({ value, onChange, placeholder, disabled }) {
   const textareaRef = useRef(null);
 
   const handleInput = (e) => {
     onChange(e.target.value);
-    const el = e.target;
-    el.style.height = 'auto';
-    el.style.height = Math.min(el.scrollHeight, 150) + 'px';
+    autoResize(e.target);
   };
+
+  const autoResize = (el) => {
+    el = el || textareaRef.current;
+    if (!el) return;
+    el.style.height = 'auto';
+    el.style.height = Math.max(400, Math.min(el.scrollHeight, 550)) + 'px';
+  };
+
+  useEffect(() => { autoResize(); }, [value]);
 
   return (
     <div className="w-full max-w-2xl">

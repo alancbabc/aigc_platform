@@ -30,6 +30,16 @@ app.use('/api/auth', authRouter);
 app.use('/api/generate', generateRouter);
 app.use('/api/history', historyRouter);
 
+// Global error handler for uncaught async errors
+app.use((err, _req, res, _next) => {
+  console.error('[server] unhandled error:', err.message, err.stack?.split('\n').slice(0, 3).join(' | '));
+  if (!res.headersSent) {
+    res.status(err.statusCode || 500).json({
+      error: err.expose ? err.message : 'Internal server error',
+    });
+  }
+});
+
 if (process.env.NODE_ENV === 'production') {
   app.use(express.static(path.join(__dirname, '..', 'dist')));
   app.get('*', (_req, res) => {

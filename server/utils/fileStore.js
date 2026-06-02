@@ -1,17 +1,18 @@
 import fs from 'fs';
 import path from 'path';
-import os from 'os';
 import { v4 as uuidv4 } from 'uuid';
 
 const locks = new Map();
 
 export async function acquireLock(key, timeout = 3000) {
   const start = Date.now();
+  let delay = 5;
   while (locks.get(key)) {
     if (Date.now() - start > timeout) {
       throw new Error(`Lock timeout for: ${key}`);
     }
-    await new Promise(resolve => setTimeout(resolve, 10));
+    await new Promise(resolve => setTimeout(resolve, delay));
+    delay = Math.min(delay * 2, 100);
   }
   locks.set(key, true);
 }
@@ -24,7 +25,10 @@ export function readJSON(filePath) {
   if (!fs.existsSync(filePath)) return null;
   try {
     return JSON.parse(fs.readFileSync(filePath, 'utf-8'));
-  } catch {
+  } catch (e) {
+    console.error(`[fileStore] corrupted JSON at ${filePath}: ${e.message}`);
+    const backup = `${filePath}.corrupted.${Date.now()}`;
+    try { fs.copyFileSync(filePath, backup); } catch {}
     return null;
   }
 }
@@ -32,9 +36,18 @@ export function readJSON(filePath) {
 function _writeAtom(filePath, data) {
   const dir = path.dirname(filePath);
   if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
-  const tmpPath = path.join(os.tmpdir(), `${uuidv4()}.json`);
+  const tmpPath = path.join(dir, `.tmp_${uuidv4()}.json`);
   fs.writeFileSync(tmpPath, JSON.stringify(data, null, 2), 'utf-8');
-  fs.renameSync(tmpPath, filePath);
+  try {
+    fs.renameSync(tmpPath, filePath);
+  } catch (err) {
+    if (err.code === 'EXDEV') {
+      fs.copyFileSync(tmpPath, filePath);
+      try { fs.unlinkSync(tmpPath); } catch {}
+    } else {
+      throw err;
+    }
+  }
 }
 
 // Public: single-shot lock + write (for callers who just need to write once)
@@ -67,7 +80,7 @@ export async function lockedRead(filePath) {
   const lockKey = path.resolve(filePath);
   await acquireLock(lockKey);
   try {
-    return _readJSON(filePath);
+    return readJSON(filePath);
   } finally {
     releaseLock(lockKey);
   }

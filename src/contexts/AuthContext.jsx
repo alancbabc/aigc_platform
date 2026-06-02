@@ -22,13 +22,11 @@ export function AuthProvider({ children }) {
             });
             if (res.status === 401) {
               localStorage.removeItem(STORAGE_KEY);
-            } else if (!res.ok) {
-              setUser(user);
-              setToken(storedToken);
-            } else {
+            } else if (res.ok) {
               setUser(user);
               setToken(storedToken);
             }
+            // On non-2xx non-401, don't set auth — server may be down
           }
         }
       } catch {
@@ -74,6 +72,7 @@ export function AuthProvider({ children }) {
     setUser(null);
     setToken(null);
     localStorage.removeItem(STORAGE_KEY);
+    sessionStorage.removeItem('aigc_tasks');
   }, []);
 
   return (

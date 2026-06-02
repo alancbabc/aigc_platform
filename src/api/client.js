@@ -38,14 +38,14 @@ export async function apiPost(endpoint, body) {
   return data;
 }
 
-async function apiRequest(endpoint, options = {}, signal, retries = 2) {
+async function apiRequest(endpoint, options = {}, retries = 2) {
   let lastError;
   for (let attempt = 0; attempt <= retries; attempt++) {
     if (attempt > 0) {
       await new Promise(r => setTimeout(r, 1000 * attempt));
     }
     try {
-      return await _doRequest(endpoint, options, signal);
+      return await _doRequest(endpoint, options);
     } catch (err) {
       lastError = err;
       if (err.name === 'AbortError') throw err;
@@ -56,7 +56,7 @@ async function apiRequest(endpoint, options = {}, signal, retries = 2) {
   throw lastError;
 }
 
-async function _doRequest(endpoint, options = {}, signal) {
+async function _doRequest(endpoint, options = {}) {
   let token = '';
   try {
     const stored = localStorage.getItem('aigc_auth');
@@ -71,7 +71,6 @@ async function _doRequest(endpoint, options = {}, signal) {
       ...(token ? { Authorization: `Bearer ${token}` } : {}),
       ...(options.headers || {}),
     },
-    signal,
     ...options,
   });
 
@@ -97,31 +96,31 @@ async function _doRequest(endpoint, options = {}, signal) {
   return data;
 }
 
-export function createGenerationAPI(signal) {
+export function createGenerationAPI() {
   return {
     image: (params) =>
       apiRequest('/generate/image', {
         method: 'POST',
         body: JSON.stringify(params),
-      }, signal),
+      }),
 
     video: (params) =>
       apiRequest('/generate/video', {
         method: 'POST',
         body: JSON.stringify(params),
-      }, signal),
+      }),
 
     audio: (params) =>
       apiRequest('/generate/audio', {
         method: 'POST',
         body: JSON.stringify(params),
-      }, signal),
+      }),
 
     interpolation: (params) =>
       apiRequest('/generate/interpolation', {
         method: 'POST',
         body: JSON.stringify(params),
-      }, signal),
+      }),
   };
 }
 
@@ -130,4 +129,12 @@ export const historyAPI = {
 
   delete: (id) =>
     apiRequest(`/history/${id}`, { method: 'DELETE' }),
+};
+
+export const optimizeAPI = {
+  optimize: (params) =>
+    apiRequest('/generate/optimize-prompt', {
+      method: 'POST',
+      body: JSON.stringify(params),
+    }),
 };

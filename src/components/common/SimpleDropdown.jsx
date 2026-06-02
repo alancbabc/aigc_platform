@@ -22,7 +22,7 @@ export default function SimpleDropdown({ title, options, selected, onSelect }) {
         onClick={() => setOpen(!open)}
         className="flex items-center gap-1.5 px-3 py-2 bg-white/[0.03] border border-border rounded-lg text-xs hover:border-white/20 transition-colors"
       >
-        <span className="text-white/40">{title}:</span>
+        <span className="text-white/40">{title}{title ? ' ' : ''}</span>
         <span className="font-medium text-white">{selected}</span>
         <svg className={`w-3 h-3 text-white/30 transition-transform duration-200 ${open ? 'rotate-180' : ''}`}
           viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3">

@@ -4,34 +4,42 @@ import AudioStudio from '../components/studio/AudioStudio';
 import InterpolationStudio from '../components/studio/InterpolationStudio';
 import HistoryGrid from '../components/history/HistoryGrid';
 
+const Wrap = ({ show, children }) => (
+  <div hidden={!show} className={show ? 'h-full' : ''}>
+    {children}
+  </div>
+);
+
 export default function DashboardPage({ type }) {
-  switch (type) {
-    case 'image':
-      return <ImageStudio mode="text2image" />;
-    case 'image-edit':
-      return <ImageStudio mode="image2image" />;
-    case 'video':
-      return <VideoStudio mode="text2video" />;
-    case 'image2video':
-      return <VideoStudio mode="image2video" />;
-    case 'a2v':
-      return <VideoStudio mode="a2v" />;
-    case 'audio':
-      return <AudioStudio mode="speech" />;
-    case 'clone':
-      return <AudioStudio mode="clone" />;
-    case 'interpolation':
-      return <InterpolationStudio />;
-    case 'history':
-      return <HistoryGrid />;
-    default:
-      return (
-        <div className="h-full flex items-center justify-center">
-          <div className="text-center">
-            <p className="text-4xl text-white/10 font-bold mb-2">404</p>
-            <p className="text-sm text-white/30">未知页面类型</p>
-          </div>
-        </div>
-      );
-  }
+  return (
+    <div className="h-full">
+      <Wrap show={type === 'image'}>
+        <ImageStudio key="text2image" mode="text2image" />
+      </Wrap>
+      <Wrap show={type === 'image-edit'}>
+        <ImageStudio key="image2image" mode="image2image" />
+      </Wrap>
+      <Wrap show={type === 'video'}>
+        <VideoStudio key="text2video" mode="text2video" />
+      </Wrap>
+      <Wrap show={type === 'image2video'}>
+        <VideoStudio key="image2video" mode="image2video" />
+      </Wrap>
+      <Wrap show={type === 'a2v'}>
+        <VideoStudio key="a2v" mode="a2v" />
+      </Wrap>
+      <Wrap show={type === 'audio'}>
+        <AudioStudio key="speech" mode="speech" />
+      </Wrap>
+      <Wrap show={type === 'clone'}>
+        <AudioStudio key="clone" mode="clone" />
+      </Wrap>
+      <Wrap show={type === 'interpolation'}>
+        <InterpolationStudio key="interpolation" />
+      </Wrap>
+      <Wrap show={type === 'history'}>
+        <HistoryGrid key="history" />
+      </Wrap>
+    </div>
+  );
 }

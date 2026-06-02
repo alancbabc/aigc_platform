@@ -41,16 +41,21 @@ export default function HistoryGrid() {
     }
   };
 
+  const filterTypes = {
+    image: ['image', 'image-edit'],
+    video: ['video', 'image2video', 'a2v', 'interpolation'],
+    audio: ['audio', 'clone'],
+  };
+
   const filtered = filter === 'all'
     ? history
-    : history.filter(h => h.type === filter);
+    : history.filter(h => filterTypes[filter]?.includes(h.type));
 
   const filters = [
     { id: 'all', label: '全部' },
     { id: 'image', label: '图片' },
     { id: 'video', label: '视频' },
     { id: 'audio', label: '音频' },
-    { id: 'interpolation', label: '插帧' },
   ];
 
   if (loading) return <LoadingSpinner size="large" />;

@@ -2,13 +2,23 @@ import { getMediaUrl } from '../../api/client';
 
 const typeConfig = {
   image: { icon: '🖼', label: '图片' },
+  'image-edit': { icon: '🖼', label: '图片编辑' },
+  text2image: { icon: '🖼', label: '文生图' },
   video: { icon: '🎬', label: '视频' },
+  image2video: { icon: '🎬', label: '图生视频' },
+  a2v: { icon: '🎬', label: '音生视频' },
+  text2video: { icon: '🎬', label: '文生视频' },
+  interpolation: { icon: '🎬', label: '插帧' },
   audio: { icon: '🎵', label: '音频' },
-  interpolation: { icon: '🎞', label: '插帧' },
+  clone: { icon: '🎵', label: '语音克隆' },
+  speech: { icon: '🎵', label: '语音合成' },
 };
 
+const isImage = (t) => ['image', 'image-edit', 'text2image'].includes(t);
+const isVideo = (t) => ['video', 'image2video', 'a2v', 'interpolation', 'text2video'].includes(t);
+
 export default function HistoryCard({ item, onClick, onDelete }) {
-  const config = typeConfig[item.type] || { icon: '📄', label: '未知' };
+  const config = typeConfig[item.type] || { icon: '📄', label: item.type || '未知' };
   const resultUrl = getMediaUrl(item.results?.[0]?.url || '');
 
   return (
@@ -16,9 +26,9 @@ export default function HistoryCard({ item, onClick, onDelete }) {
       onClick={onClick}
       className="group relative aspect-square rounded-xl overflow-hidden border border-border bg-white/[0.01] cursor-pointer hover:border-white/20 transition-all hover:scale-[1.02]"
     >
-      {item.type === 'image' ? (
+      {isImage(item.type) ? (
         <img src={resultUrl} alt="" className="w-full h-full object-cover" loading="lazy" />
-      ) : item.type === 'video' ? (
+      ) : isVideo(item.type) ? (
         <div className="w-full h-full relative bg-black/40">
           <video src={resultUrl} className="w-full h-full object-cover" muted />
           <div className="absolute inset-0 flex items-center justify-center">

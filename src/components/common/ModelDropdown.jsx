@@ -30,7 +30,7 @@ export default function ModelDropdown({ models, selectedModel, onSelect }) {
         <div className="w-6 h-6 bg-primary/10 rounded-full flex items-center justify-center text-[10px] font-bold text-primary">
           {selected?.name?.charAt(0) || '?'}
         </div>
-        <span className="text-white font-medium text-xs">{selected?.name || '选择模型'}</span>
+        <span className="text-white font-medium text-xs">{selected?.name || models[0]?.name || ''}</span>
         <svg className={`w-3 h-3 text-white/30 transition-transform duration-200 ${open ? 'rotate-180' : ''}`}
           viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3">
           <polyline points="6 9 12 15 18 9" />
