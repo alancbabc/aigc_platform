@@ -5,7 +5,7 @@ import { useTasks } from '../../contexts/TaskContext';
 
 const TYPE_LABELS = {
   image: '图片', 'image-edit': '图片编辑', text2image: '文生图',
-  video: '视频', image2video: '图生视频', a2v: '音生视频', text2video: '文生视频', interpolation: '插帧',
+  video: '视频', image2video: '图生音视频', a2v: '音生视频', text2video: '文生音视频', interpolation: '插帧生音视频',
   audio: '音频', clone: '语音克隆', speech: '语音合成',
 };
 const TYPE_COLORS = {
@@ -20,13 +20,14 @@ function isVid(type) { return ['video','image2video','a2v','interpolation','text
 function isAud(type) { return ['audio','clone','speech'].includes(type); }
 
 export default function TaskCard({ task }) {
-  const { removeTask } = useTasks();
+  const { removeTask, cancelTask } = useTasks();
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [fullscreen, setFullscreen] = useState(false);
   const { status, prompt, model, type, results, error, duration } = task;
   const done = status === 'done';
   const failed = status === 'failed';
   const active = !done && !failed;
+  const cancellable = ['generating', 'submitted'].includes(status) && task.generationId;
   const r = results?.[0];
   const rUrl = r ? getMediaUrl(r.url) : null;
 
@@ -50,9 +51,16 @@ export default function TaskCard({ task }) {
         </div>
       )}
       {active && status !== 'unknown' && (
-        <div className="flex items-center gap-2 mb-2">
-          <div className="w-3 h-3 border-2 border-white/10 border-t-primary rounded-full animate-spin" />
-          <span className="text-[10px] text-primary animate-pulse">生成中...</span>
+        <div className="flex items-center justify-between gap-2 mb-2">
+          <div className="flex items-center gap-2 min-w-0">
+            <div className="w-3 h-3 border-2 border-white/10 border-t-primary rounded-full animate-spin" />
+            <span className="text-[10px] text-primary animate-pulse">生成中...</span>
+          </div>
+          {cancellable && (
+            <button onClick={() => cancelTask(task.generationId)} className="text-[10px] text-white/30 hover:text-red-400 transition-colors">
+              取消
+            </button>
+          )}
         </div>
       )}
       {status === 'unknown' && (

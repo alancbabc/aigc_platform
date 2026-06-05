@@ -7,7 +7,6 @@ import SimpleDropdown from '../common/SimpleDropdown';
 import AudioPicker from '../common/AudioPicker';
 import PromptInput from '../common/PromptInput';
 import GenerateButton from '../common/GenerateButton';
-import PromptPanel from '../common/PromptPanel';
 import { showToast } from '../common/Toast';
 import { readFileAsBase64 } from '../../utils/fileHelpers';
 import { useTasks } from '../../contexts/TaskContext';
@@ -16,7 +15,7 @@ const LANG=['auto','chinese','english','french','german','italian','japanese','k
 let _as=0;function _aid(){return `c_${Date.now()}_${++_as}`;}
 
 export default function AudioStudio({ mode = 'speech' }) {
-  const ic=mode==='clone';const{addTask,updateTask,optimizeOpen,setOptimizeOpen}=useTasks();const loc=useLocation();
+  const ic=mode==='clone';const{addTask,updateTask,optimizeOpen,setOptimizeOpen,setOptimizePanel}=useTasks();const loc=useLocation();
   const [inputs,setInputs]=useState('');useEffect(()=>{if(loc.state?.reusePrompt)setInputs(loc.state.reusePrompt)},[loc.key]);
   const [lang,setLang]=useState('auto');const [speaker,setSpeaker]=useState(getAudioModelById('Qwen3-TTS').speakers[0].id);
   const [instr,setInstr]=useState('');const [vd,setVd]=useState(false);
@@ -25,6 +24,7 @@ export default function AudioStudio({ mode = 'speech' }) {
   const [gn,setGn]=useState(1);
   const [gc,setGc]=useState(0);const [err,setErr]=useState(null);
   const can=ic?(!!inputs.trim()&&!!ra):!!inputs.trim();
+  useEffect(()=>{if(optimizeOpen)setOptimizePanel({prompt:inputs,type:'audio',onApply:setInputs});},[optimizeOpen,inputs,setOptimizePanel]);
   const acRef=useRef(0),atRef=useRef(0);
   const abt=()=>{acRef.current++;clearTimeout(atRef.current);atRef.current=setTimeout(()=>{showToast(`生成完成 (${acRef.current} 个)`,'success');acRef.current=0;},500);};
 
@@ -67,7 +67,6 @@ export default function AudioStudio({ mode = 'speech' }) {
           {err&&<div className="px-2 py-1 bg-red-500/10 border border-red-500/20 rounded-md"><p className="text-red-400 text-[10px]">{err}</p></div>}
         </div>
       </div>
-      {optimizeOpen&&<PromptPanel prompt={inputs} type="audio" onApply={(p)=>{setInputs(p);}} onClose={()=>setOptimizeOpen(false)}/>}
     </div>
   );
 }

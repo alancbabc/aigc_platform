@@ -4,24 +4,24 @@ import { createGenerationAPI } from '../../api/client';
 import { videoModels, getVideoModelById } from '../../data/models';
 import ModelDropdown from '../common/ModelDropdown';
 import SimpleDropdown from '../common/SimpleDropdown';
+import ResolutionSelector from '../common/ResolutionSelector';
 import ImageUploader from '../common/ImageUploader';
 import AudioPicker from '../common/AudioPicker';
 import GenerateButton from '../common/GenerateButton';
 import PromptInput from '../common/PromptInput';
-import PromptPanel from '../common/PromptPanel';
+import NegativePromptInput from '../common/NegativePromptInput';
 import { showToast } from '../common/Toast';
 import { readFileAsBase64 } from '../../utils/fileHelpers';
 import { useTasks } from '../../contexts/TaskContext';
 
 const CFG = {
-  text2video: { ni: false, na: false, sq: true, can: (p) => !!p.trim(), btn: '生成视频', bo: '请输入 Prompt' },
-  image2video: { ni: true, na: false, sq: false, can: (p,i) => !!p.trim()&&i, btn: '生成视频', bo: '请上传图片并输入 Prompt' },
-  a2v: { ni: false, na: true, sq: false, can: (p,_,a) => !!p.trim()&&a, btn: '生成视频', bo: '请上传音频并输入 Prompt' },
+  text2video: { ni: false, sq: true, can: (p) => !!p.trim(), btn: '生成音视频', bo: '请输入 Prompt' },
+  image2video: { ni: true, sq: false, can: (p,i) => !!p.trim()&&i, btn: '生成音视频', bo: '请上传图片并输入 Prompt' },
 };
 let _vs=0;function _vid(){return `c_${Date.now()}_${++_vs}`;}
 
 export default function VideoStudio({ mode = 'text2video' }) {
-  const cfg=CFG[mode]||CFG.text2video;const{addTask,updateTask,optimizeOpen,setOptimizeOpen}=useTasks();const loc=useLocation();
+  const cfg=CFG[mode]||CFG.text2video;const{addTask,updateTask,optimizeOpen,setOptimizeOpen,setOptimizePanel}=useTasks();const loc=useLocation();
   const [sid,setSid]=useState(videoModels[0].id);const [ri,setRi]=useState(null);
   const [prompt,setPrompt]=useState('');useEffect(()=>{if(loc.state?.reusePrompt)setPrompt(loc.state.reusePrompt)},[loc.key]);
   const [np,setNp]=useState('text, subtitles, lower-third, chyron, nameplate, news broadcast, TV graphics, interview, breaking news banner, character introduction overlay, manga annotation, comic annotation, text bubble, lettering artifacts, on-screen text, kana, furigana, character card, profile card, vertical text, vertical subtitles, vertical title card');const [seed,setSeed]=useState('');
@@ -29,7 +29,8 @@ export default function VideoStudio({ mode = 'text2video' }) {
   const [qual,setQual]=useState(videoModels[0].defaultQuality);
   const [audio,setAudio]=useState(null);const [gn,setGn]=useState(1);
   const [gc,setGc]=useState(0);const [err,setErr]=useState(null);
-  const cm=getVideoModelById(sid);const can=cfg.can(prompt,!!ri,!!audio);
+  const cm=getVideoModelById(sid);const can=cfg.can(prompt,!!ri);
+  useEffect(()=>{if(optimizeOpen)setOptimizePanel({prompt,type:'video',onApply:setPrompt});},[optimizeOpen,prompt,setOptimizePanel]);
   const vcRef=useRef(0),vtRef=useRef(0);
   const vbt=()=>{vcRef.current++;clearTimeout(vtRef.current);vtRef.current=setTimeout(()=>{showToast(`生成完成 (${vcRef.current} 个)`,'success');vcRef.current=0;},500);};
 
@@ -49,28 +50,27 @@ export default function VideoStudio({ mode = 'text2video' }) {
     <div className="h-full flex overflow-hidden">
       <div className="flex-1 flex flex-col overflow-hidden min-w-0">
         {gc>0&&(<div className="flex-shrink-0 mx-3 mt-3 px-2 py-1 bg-primary/10 border border-primary/20 rounded-md flex items-center gap-1.5"><div className="w-2.5 h-2.5 border-2 border-white/10 border-t-primary rounded-full animate-spin"/><span className="text-[10px] text-primary font-medium">生成中 ({gc})</span></div>)}
-        <div className="flex-1 flex flex-col min-h-0 p-4 gap-3">
+        <div className="flex-1 flex flex-col min-h-0 p-4 pb-0 gap-3 overflow-y-auto">
           <div className="flex items-center gap-2 flex-wrap">
             <ModelDropdown models={videoModels} selectedModel={sid} onSelect={(m)=>setSid(m.id)}/>
             {cfg.sq&&<SimpleDropdown title="质量" options={cm.qualities.map(q=>q.name)} selected={cm.qualities.find(q=>q.id===qual)?.name||''} onSelect={(v)=>{const q=cm.qualities.find(q=>q.name===v);if(q)setQual(q.id);}}/>}
-            <SimpleDropdown title="分辨率" options={cm.resolutions} selected={res} onSelect={setRes}/>
+            <ResolutionSelector initialValue={res} options={cm.resolutions} onSelect={setRes} />
             <SimpleDropdown title="时长" options={cm.durations.map(String)} selected={String(dur)} onSelect={(v)=>setDur(parseInt(v))}/>
           </div>
           {cfg.ni&&<ImageUploader file={ri} onUpload={setRi} onClear={()=>setRi(null)}/>}
-          {cfg.na&&<AudioPicker file={audio} onUpload={setAudio} onClear={()=>setAudio(null)}/>}
-          {cm.supportsNegativePrompt&&<textarea value={np} onChange={e=>setNp(e.target.value)} placeholder="负向提示词（可选）" rows={4} className="w-full bg-white/[0.03] border border-border rounded-lg px-3 py-2 text-sm text-white placeholder:text-white/15 focus:outline-none focus:ring-1 focus:ring-primary/30 resize-none overflow-hidden"/>}
-          <PromptInput value={prompt} onChange={setPrompt} placeholder={mode==='a2v'?'描述与音频匹配的视频画面...':cfg.ni?'描述基于图片的视频动效...':'描述想要的视频内容。选择模型、质量、分辨率，点击「生成视频」'}/>
-          <div className="mt-auto flex items-center gap-2">
-            <button onClick={()=>setOptimizeOpen(!optimizeOpen)} className={`px-3 py-1.5 rounded-lg text-xs border transition-all ${optimizeOpen?'bg-primary/10 text-primary border-primary/30':'bg-white/[0.03] text-white/40 border-border hover:text-white hover:bg-white/10'}`}>
-              {optimizeOpen?'关闭优化':'优化 Prompt'}
-            </button>
-            <SimpleDropdown title="数量" options={['1','2','4']} selected={String(gn)} onSelect={(v)=>setGn(parseInt(v))}/>
-            <GenerateButton onClick={()=>gen()} disabled={!can} label={can?cfg.btn:cfg.bo}/>
-          </div>
-          {err&&<div className="px-2 py-1 bg-red-500/10 border border-red-500/20 rounded-md"><p className="text-red-400 text-[10px]">{err}</p></div>}
+          <AudioPicker file={audio} onUpload={setAudio} onClear={()=>setAudio(null)} label="上传音频（可选）"/>
+          {cm.supportsNegativePrompt&&<NegativePromptInput value={np} onChange={setNp} placeholder="负向提示词（可选）"/>}
+          <PromptInput value={prompt} onChange={setPrompt} placeholder={cfg.ni?'描述基于图片的视频动效，可选配合音频...':'描述想要的音视频内容。选择模型、质量、分辨率，可选上传音频，点击「生成音视频」'}/>
         </div>
+        <div className="flex-shrink-0 flex items-center gap-2 p-4 pt-0">
+          <button onClick={()=>setOptimizeOpen(!optimizeOpen)} className={`px-3 py-1.5 rounded-lg text-xs border transition-all ${optimizeOpen?'bg-primary/10 text-primary border-primary/30':'bg-white/[0.03] text-white/40 border-border hover:text-white hover:bg-white/10'}`}>
+            {optimizeOpen?'关闭优化':'优化 Prompt'}
+          </button>
+          <SimpleDropdown title="数量" options={['1','2','4']} selected={String(gn)} onSelect={(v)=>setGn(parseInt(v))}/>
+          <GenerateButton onClick={()=>gen()} disabled={!can} label={can?cfg.btn:cfg.bo}/>
+        </div>
+        {err&&<div className="px-2 py-1 bg-red-500/10 border border-red-500/20 rounded-md"><p className="text-red-400 text-[10px]">{err}</p></div>}
       </div>
-      {optimizeOpen&&<PromptPanel prompt={prompt} type="video" onApply={(p)=>{setPrompt(p);}} onClose={()=>setOptimizeOpen(false)}/>}
     </div>
   );
 }

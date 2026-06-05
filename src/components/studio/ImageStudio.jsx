@@ -4,10 +4,11 @@ import { createGenerationAPI } from '../../api/client';
 import { imageModels, getImageModelById } from '../../data/models';
 import ModelDropdown from '../common/ModelDropdown';
 import SimpleDropdown from '../common/SimpleDropdown';
+import ResolutionSelector from '../common/ResolutionSelector';
 import ImageUploader from '../common/ImageUploader';
 import PromptInput from '../common/PromptInput';
+import NegativePromptInput from '../common/NegativePromptInput';
 import GenerateButton from '../common/GenerateButton';
-import PromptPanel from '../common/PromptPanel';
 import { showToast } from '../common/Toast';
 import { readFileAsBase64 } from '../../utils/fileHelpers';
 import { useTasks } from '../../contexts/TaskContext';
@@ -15,13 +16,14 @@ import { useTasks } from '../../contexts/TaskContext';
 let _ts=0;function _tid(){return `c_${Date.now()}_${++_ts}`;}
 
 export default function ImageStudio({ mode = 'text2image' }) {
-  const ie=mode==='image2image';const{addTask,updateTask,optimizeOpen,setOptimizeOpen}=useTasks();const loc=useLocation();
+  const ie=mode==='image2image';const{addTask,updateTask,optimizeOpen,setOptimizeOpen,setOptimizePanel}=useTasks();const loc=useLocation();
   const [sid,setSid]=useState(ie?imageModels[1].id:imageModels[0].id);const [size,setSize]=useState(imageModels[0].defaultSize);
   const [refImgs,setRefImgs]=useState([]);const [prompt,setPrompt]=useState('');useEffect(()=>{if(loc.state?.reusePrompt)setPrompt(loc.state.reusePrompt)},[loc.key]);
   const [np,setNp]=useState('low quality, blurry, distorted, deformed, bad anatomy, extra limbs, watermark, text, signature');const [seed,setSeed]=useState('');
   const [steps,setSteps]=useState(imageModels[0].defaultInferenceSteps);const [gn,setGn]=useState(1);
   const [gc,setGc]=useState(0);const [err,setErr]=useState(null);
   const cm=getImageModelById(sid);const can=ie?(prompt.trim()&&refImgs.length>0):!!prompt.trim();
+  useEffect(()=>{if(optimizeOpen)setOptimizePanel({prompt,type:'image',onApply:setPrompt});},[optimizeOpen,prompt,setOptimizePanel]);
   const tcRef=useRef(0),ttRef=useRef(0);
   const bt=()=>{tcRef.current++;clearTimeout(ttRef.current);ttRef.current=setTimeout(()=>{showToast(`生成完成 (${tcRef.current} 个)`,'success');tcRef.current=0;},500);};
 
@@ -37,10 +39,10 @@ export default function ImageStudio({ mode = 'text2image' }) {
         <div className="flex-1 flex flex-col min-h-0 p-4 gap-3">
           <div className="flex items-center gap-2 flex-wrap">
             <ModelDropdown models={imageModels.filter(m=>ie?m.id==='Qwen-Image-Edit':m.id==='Qwen-Image')} selectedModel={sid} onSelect={(m)=>setSid(m.id)}/>
-            <SimpleDropdown title="尺寸" options={cm.sizes} selected={size} onSelect={setSize}/>
+            <ResolutionSelector initialValue={size} options={cm.sizes} onSelect={setSize} />
           </div>
           {ie&&<ImageUploader file={refImgs[0]} onUpload={(f)=>setRefImgs([f])} onClear={()=>setRefImgs([])} label="上传参考图片"/>}
-          {cm.supportsNegativePrompt&&<textarea value={np} onChange={e=>setNp(e.target.value)} placeholder="负向提示词（可选）" rows={4} className="w-full bg-white/[0.03] border border-border rounded-lg px-3 py-2 text-sm text-white placeholder:text-white/15 focus:outline-none focus:ring-1 focus:ring-primary/30 resize-none overflow-hidden"/>}
+          {cm.supportsNegativePrompt&&<NegativePromptInput value={np} onChange={setNp} placeholder="负向提示词（可选）"/>}
           <PromptInput value={prompt} onChange={setPrompt} placeholder={ie?'描述您希望对图片进行的修改...':'描述您想要生成的内容。选择模型和尺寸，点击「生成图片」'}/>
           <div className="mt-auto flex items-center gap-2">
             <button onClick={()=>setOptimizeOpen(!optimizeOpen)} className={`px-3 py-1.5 rounded-lg text-xs border transition-all ${optimizeOpen?'bg-primary/10 text-primary border-primary/30':'bg-white/[0.03] text-white/40 border-border hover:text-white hover:bg-white/10'}`}>
@@ -52,7 +54,6 @@ export default function ImageStudio({ mode = 'text2image' }) {
           {err&&<div className="px-2 py-1 bg-red-500/10 border border-red-500/20 rounded-md"><p className="text-red-400 text-[10px]">{err}</p></div>}
         </div>
       </div>
-      {optimizeOpen&&<PromptPanel prompt={prompt} type="image" onApply={(p)=>{setPrompt(p);}} onClose={()=>setOptimizeOpen(false)}/>}
     </div>
   );
 }

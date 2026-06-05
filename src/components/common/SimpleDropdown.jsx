@@ -1,8 +1,10 @@
 import { useState, useRef, useEffect } from 'react';
 
-export default function SimpleDropdown({ title, options, selected, onSelect }) {
+export default function SimpleDropdown({ title, options, selected, onSelect, getOptionLabel }) {
   const [open, setOpen] = useState(false);
+  const [upward, setUpward] = useState(false);
   const ref = useRef(null);
+  const listRef = useRef(null);
 
   useEffect(() => {
     if (!open) return;
@@ -13,13 +15,26 @@ export default function SimpleDropdown({ title, options, selected, onSelect }) {
     return () => window.removeEventListener('mousedown', handler);
   }, [open]);
 
+  const toggleOpen = () => {
+    if (!open) {
+      setUpward(false);
+      requestAnimationFrame(() => {
+        if (listRef.current) {
+          const rect = listRef.current.getBoundingClientRect();
+          if (rect.bottom > window.innerHeight - 20) setUpward(true);
+        }
+      });
+    }
+    setOpen(!open);
+  };
+
   if (!options || options.length === 0) return null;
 
   return (
     <div className="relative" ref={ref}>
       <button
         type="button"
-        onClick={() => setOpen(!open)}
+        onClick={toggleOpen}
         className="flex items-center gap-1.5 px-3 py-2 bg-white/[0.03] border border-border rounded-lg text-xs hover:border-white/20 transition-colors"
       >
         <span className="text-white/40">{title}{title ? ' ' : ''}</span>
@@ -31,17 +46,17 @@ export default function SimpleDropdown({ title, options, selected, onSelect }) {
       </button>
 
       {open && (
-        <div className="absolute top-full left-0 mt-1 bg-[#111] border border-border rounded-xl p-2 shadow-4xl z-50 min-w-[140px]">
+        <div ref={listRef} className={`absolute ${upward ? 'bottom-full mb-1' : 'top-full mt-1'} left-0 bg-[#111] border border-border rounded-xl p-2 shadow-4xl z-50 min-w-[140px]`}>
           {options.map(opt => (
             <button
               key={opt}
               type="button"
               onClick={() => { onSelect(opt); setOpen(false); }}
               className={`w-full text-left px-3 py-1.5 rounded-lg text-xs transition-colors ${
-                opt === selected ? 'bg-primary/10 text-primary font-medium' : 'text-white/70 hover:bg-white/5 hover:text-white'
+                (getOptionLabel ? getOptionLabel(opt) : opt) === selected || opt === selected ? 'bg-primary/10 text-primary font-medium' : 'text-white/70 hover:bg-white/5 hover:text-white'
               }`}
             >
-              {opt}
+              {getOptionLabel ? getOptionLabel(opt) : opt}
             </button>
           ))}
         </div>

@@ -1,10 +1,17 @@
 import { createContext, useContext, useState, useCallback, useEffect } from 'react';
+import { generationTaskAPI } from '../api/client';
 
 const TaskContext = createContext(null);
 
 const STORAGE_KEY = 'aigc_tasks';
 const MAX_TASKS = 50;
 const MAX_AGE_MS = 24 * 60 * 60 * 1000;
+const TASK_LOST_MESSAGE = '服务端已找不到该任务状态，请稍后到历史记录查看结果';
+const TASK_CANCELLED_MESSAGE = '任务已取消';
+
+function isMissingGenerationError(message) {
+  return /generation not found|not found|404/i.test(message || '');
+}
 
 function loadTasks() {
   try {
@@ -33,9 +40,73 @@ export function TaskProvider({ children }) {
   const [historyVersion, setHistoryVersion] = useState(0);
   const [lastTaskType, setLastTaskType] = useState(null);
   const [optimizeOpen, setOptimizeOpen] = useState(false);
+  const [optimizePanel, setOptimizePanel] = useState(null);
 
   useEffect(() => {
     try { sessionStorage.setItem(STORAGE_KEY, JSON.stringify(tasks)); } catch {}
+  }, [tasks]);
+
+  useEffect(() => {
+    const pollable = tasks.filter(t =>
+      t.generationId &&
+      ['generating', 'submitted', 'unknown'].includes(t.status)
+    );
+    if (pollable.length === 0) return;
+
+    let cancelled = false;
+    const poll = async () => {
+      const updates = await Promise.all(pollable.map(async (task) => {
+        try {
+          const data = await generationTaskAPI.status(task.generationId);
+          return { id: task.id, data };
+        } catch (err) {
+          return { id: task.id, error: err.message, lost: isMissingGenerationError(err.message) };
+        }
+      }));
+      if (cancelled) return;
+      setTasks(prev => prev.map(task => {
+        const update = updates.find(u => u.id === task.id);
+        if (!update) return task;
+        if (update.data) {
+          const { status, results, error, duration } = update.data;
+          const nextStatus = status === 'cancelled' ? 'failed' : status;
+          const nextError = error || (status === 'cancelled' ? TASK_CANCELLED_MESSAGE : null);
+          const nextResults = results || task.results;
+          const nextDuration = ['done', 'failed', 'cancelled'].includes(status) ? (duration ?? task.duration) : task.duration;
+          if (
+            task.status === nextStatus &&
+            task.results === nextResults &&
+            task.error === nextError &&
+            task.duration === nextDuration
+          ) {
+            return task;
+          }
+          return {
+            ...task,
+            status: nextStatus,
+            results: nextResults,
+            error: nextError,
+            duration: nextDuration,
+            updatedAt: Date.now(),
+          };
+        }
+        if (['generating', 'submitted', 'unknown'].includes(task.status)) {
+          if (update.lost) {
+            return { ...task, generationId: null, status: 'unknown', error: TASK_LOST_MESSAGE, updatedAt: Date.now() };
+          }
+          if (!update.error || task.error === update.error) return task;
+          return { ...task, status: 'unknown', error: update.error || task.error, updatedAt: Date.now() };
+        }
+        return task;
+      }));
+    };
+
+    poll();
+    const timer = setInterval(poll, 3000);
+    return () => {
+      cancelled = true;
+      clearInterval(timer);
+    };
   }, [tasks]);
 
   const addTask = useCallback((task) => {
@@ -66,6 +137,25 @@ export function TaskProvider({ children }) {
     setTasks(prev => prev.filter(t => t.id !== generationId && t.generationId !== generationId));
   }, []);
 
+  const cancelTask = useCallback(async (generationId) => {
+    if (!generationId) return;
+    try {
+      await generationTaskAPI.cancel(generationId);
+    } catch (err) {
+      setTasks(prev => prev.map(t =>
+        (t.id === generationId || t.generationId === generationId)
+          ? { ...t, error: `取消请求失败: ${err.message}`, updatedAt: Date.now() }
+          : t
+      ));
+      return;
+    }
+    setTasks(prev => prev.map(t =>
+      (t.id === generationId || t.generationId === generationId)
+        ? { ...t, status: 'failed', error: TASK_CANCELLED_MESSAGE, updatedAt: Date.now() }
+        : t
+    ));
+  }, []);
+
   const clearDone = useCallback(() => {
     setTasks(prev => prev.filter(t => t.status === 'generating' || t.status === 'submitted'));
   }, []);
@@ -77,9 +167,11 @@ export function TaskProvider({ children }) {
   return (
     <TaskContext.Provider value={{
       tasks, addTask, updateTask, removeTask, clearDone,
+      cancelTask,
       historyVersion, notifyHistoryChange,
       lastTaskType, setLastTaskType,
       optimizeOpen, setOptimizeOpen,
+      optimizePanel, setOptimizePanel,
     }}>
       {children}
     </TaskContext.Provider>

@@ -138,3 +138,12 @@ export const optimizeAPI = {
       body: JSON.stringify(params),
     }),
 };
+
+export const generationTaskAPI = {
+  status: (generationId) => apiRequest(`/generate/${generationId}/status`),
+
+  cancel: (generationId) =>
+    apiRequest(`/generate/${generationId}/cancel`, {
+      method: 'POST',
+    }),
+};

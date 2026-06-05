@@ -6,7 +6,7 @@ import HistoryTab from './HistoryTab';
 export default function RightPanel() {
   const [collapsed, setCollapsed] = useState(false);
   const [tab, setTab] = useState('tasks');
-  const { tasks, optimizeOpen } = useTasks();
+  const { tasks } = useTasks();
   const activeCount = tasks.filter(t => t.status === 'generating' || t.status === 'submitted').length;
 
   if (collapsed) {
@@ -25,7 +25,7 @@ export default function RightPanel() {
   }
 
   return (
-    <div className={`flex-shrink-0 border-l border-border bg-app-bg flex flex-col h-full overflow-hidden ${optimizeOpen ? 'flex-1' : 'w-1/2'}`} style={{ minWidth: 300 }}>
+    <div className="flex-1 min-w-[240px] border-l border-border bg-app-bg flex flex-col h-full overflow-hidden">
       <div className="flex items-center border-b border-border">
         <button
           onClick={() => setTab('tasks')}

@@ -45,12 +45,13 @@ function updateTaskStatus(generationId, taskId, status, error) {
   }
 }
 
-function finishGeneration(generationId, error = null) {
+function finishGeneration(generationId, error = null, payload = {}) {
   const gen = activeTasks.get(generationId);
   if (!gen) return;
   gen.completed = !error;
   gen.error = error;
   gen.finishedAt = Date.now();
+  Object.assign(gen, payload);
   setTimeout(() => activeTasks.delete(generationId), 10 * 60 * 1000).unref?.();
 }
 
@@ -70,6 +71,34 @@ function getGenerationForUser(generationId, username) {
   if (!gen || gen.userId !== username) return null;
   return gen;
 }
+
+generateRouter.get('/:generationId/status', (req, res) => {
+  const gen = getGenerationForUser(req.params.generationId, req.user.username);
+  if (!gen) return res.status(404).json({ error: 'Generation not found' });
+  const status = gen.cancelled
+    ? 'cancelled'
+    : gen.completed
+      ? 'done'
+      : gen.error
+        ? 'failed'
+        : 'generating';
+  res.json({
+    generationId: req.params.generationId,
+    status,
+    error: gen.error || null,
+    tasks: gen.tasks,
+    results: gen.results || null,
+    historyId: gen.historyId || null,
+    duration: gen.finishedAt ? gen.finishedAt - gen.createdAt : Date.now() - gen.createdAt,
+  });
+});
+
+generateRouter.post('/:generationId/cancel', (req, res) => {
+  const gen = getGenerationForUser(req.params.generationId, req.user.username);
+  if (!gen) return res.status(404).json({ error: 'Generation not found' });
+  cancelGeneration(req.params.generationId, req.user.username);
+  res.json({ success: true, generationId: req.params.generationId, status: 'cancelled' });
+});
 
 // ========= 工具函数 =========
 
@@ -123,8 +152,8 @@ function ensureOutputDir(username) {
 }
 
 const VALID_DURATIONS = ['3', '5', '10', '15'];
-const VALID_RESOLUTIONS = ['1088x1920', '1024x1536', '1024x1024', '720x1280', '576x1024', '1024x768', '768x768', '1328x1328', '768x1024', '1536x1024', '1024x1536'];
 const VALID_IMAGE_SIZES = ['1024x1024', '768x768', '1328x1328', '1024x768', '768x1024', '1536x1024', '1024x1536'];
+const VALID_RESOLUTIONS = ['1088x1920', '1024x1536', '1024x1024', '720x1280', '576x1024'];
 
 function assertInt(value, min, max, field) {
   const n = parseInt(value);
@@ -161,7 +190,6 @@ const VIDEO_MODEL_PIPELINES = {
   'LTX-2': {
     standard: 'ti2v_two_stage',
     high: 'ti2vid_two_stages_hq',
-    audio: 'a2vid_two_stage',
   },
 };
 
@@ -270,7 +298,7 @@ generateRouter.post('/image', async (req, res) => {
       return res.status(400).json({ error: 'Prompt is required' });
     }
 
-    assertOneOf(size, VALID_IMAGE_SIZES, 'size');
+    assertOneOf(size || '1328x1328', VALID_IMAGE_SIZES, 'size');
     const steps = assertInt(num_inference_steps || 50, 1, 100, 'num_inference_steps');
     const { width, height } = parseSize(size || '1328x1328');
     const imageList = images && Array.isArray(images) && images.length > 0 ? images : (image ? [image] : []);
@@ -341,8 +369,6 @@ generateRouter.post('/image', async (req, res) => {
     }
 
     allTempFiles.forEach(f => { try { fs.unlinkSync(f); } catch {} });
-    finishGeneration(generationId);
-
     const historyEntry = {
       type: generationType,
       model: modelId,
@@ -362,6 +388,7 @@ generateRouter.post('/image', async (req, res) => {
 
     if (results.length > 0) {
       const historyRecord = await addHistory(username, historyEntry);
+      finishGeneration(generationId, null, { results, historyId: historyRecord.id });
       res.json({
         success: true,
         generationId,
@@ -371,6 +398,7 @@ generateRouter.post('/image', async (req, res) => {
         errors: errors.length > 0 ? errors : undefined,
       });
     } else {
+      finishGeneration(generationId, 'All generation tasks failed', { results, errors });
       res.status(500).json({
         error: 'All generation tasks failed',
         generationId,
@@ -408,19 +436,17 @@ generateRouter.post('/video', async (req, res) => {
     }
 
     assertOneOf(duration, VALID_DURATIONS, 'duration');
-    assertOneOf(resolution, VALID_RESOLUTIONS, 'resolution');
+    assertOneOf(resolution || '1088x1920', VALID_RESOLUTIONS, 'resolution');
     const { width, height } = parseSize(resolution || '1088x1920');
     const seconds = duration || 5;
     const frameRate = 24;
     const numFrames = Math.floor(((seconds * frameRate + 7) / 8)) * 8 + 1;
     const hasAudio = !!audio_base64;
     const hasImage = !!image_base64;
-    const generationType = hasAudio ? 'a2v' : (hasImage || mode === 'image2video' ? 'image2video' : 'video');
+    const generationType = hasImage || mode === 'image2video' ? 'image2video' : 'video';
 
     let pipelineName;
-    if (hasAudio) {
-      pipelineName = pipelines.audio;
-    } else if (hasImage) {
+    if (hasImage) {
       pipelineName = pipelines.standard;
     } else if (quality === 'standard' || quality === 'ti2v_two_stage') {
       pipelineName = pipelines.standard;
@@ -509,8 +535,6 @@ generateRouter.post('/video', async (req, res) => {
     }
 
     allTempFiles.forEach(f => { try { fs.unlinkSync(f); } catch {} });
-    finishGeneration(generationId);
-
     const historyEntry = {
       type: generationType,
       model: modelId,
@@ -535,6 +559,7 @@ generateRouter.post('/video', async (req, res) => {
 
     if (results.length > 0) {
       const historyRecord = await addHistory(username, historyEntry);
+      finishGeneration(generationId, null, { results, historyId: historyRecord.id });
       res.json({
         success: true,
         generationId,
@@ -546,6 +571,7 @@ generateRouter.post('/video', async (req, res) => {
         errors: errors.length > 0 ? errors : undefined,
       });
     } else {
+      finishGeneration(generationId, 'All generation tasks failed', { results, errors });
       res.status(500).json({
         error: 'All generation tasks failed',
         generationId,
@@ -592,7 +618,7 @@ generateRouter.post('/interpolation', async (req, res) => {
     }
 
     assertOneOf(duration, VALID_DURATIONS, 'duration');
-    assertOneOf(resolution, VALID_RESOLUTIONS, 'resolution');
+    assertOneOf(resolution || '1088x1920', VALID_RESOLUTIONS, 'resolution');
     assertArrayLength(frame_positions, frames.length, 'frame_positions');
     assertArrayLength(frame_strengths, frames.length, 'frame_strengths');
     const { width, height } = parseSize(resolution || '1088x1920');
@@ -699,8 +725,6 @@ generateRouter.post('/interpolation', async (req, res) => {
     }
 
     allTempFiles.forEach(f => { try { fs.unlinkSync(f); } catch {} });
-    finishGeneration(generationId);
-
     const historyEntry = {
       type: 'interpolation',
       model: modelId,
@@ -724,6 +748,7 @@ generateRouter.post('/interpolation', async (req, res) => {
 
     if (results.length > 0) {
       const historyRecord = await addHistory(username, historyEntry);
+      finishGeneration(generationId, null, { results, historyId: historyRecord.id });
       res.json({
         success: true,
         generationId,
@@ -735,6 +760,7 @@ generateRouter.post('/interpolation', async (req, res) => {
         errors: errors.length > 0 ? errors : undefined,
       });
     } else {
+      finishGeneration(generationId, 'All generation tasks failed', { results, errors });
       res.status(500).json({
         error: 'All generation tasks failed',
         generationId,
@@ -890,8 +916,6 @@ generateRouter.post('/audio', async (req, res) => {
     }
 
     allTempFiles.forEach(f => { try { fs.unlinkSync(f); } catch {} });
-    finishGeneration(generationId);
-
     const historyEntry = {
       type: generationType,
       model: modelId,
@@ -902,6 +926,7 @@ generateRouter.post('/audio', async (req, res) => {
 
     if (results.length > 0) {
       const historyRecord = await addHistory(username, historyEntry);
+      finishGeneration(generationId, null, { results, historyId: historyRecord.id });
       res.json({
         success: true,
         generationId,
@@ -911,6 +936,7 @@ generateRouter.post('/audio', async (req, res) => {
         errors: errors.length > 0 ? errors : undefined,
       });
     } else {
+      finishGeneration(generationId, 'All generation tasks failed', { results, errors });
       res.status(500).json({
         error: 'All generation tasks failed',
         generationId,

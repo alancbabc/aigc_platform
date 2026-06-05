@@ -10,11 +10,11 @@ const TYPE_CONFIG = {
   image: { label: '图片', route: '/dashboard/image' },
   'image-edit': { label: '图片编辑', route: '/dashboard/image-edit' },
   video: { label: '视频', route: '/dashboard/video' },
-  image2video: { label: '图生视频', route: '/dashboard/image2video' },
-  a2v: { label: '音生视频', route: '/dashboard/a2v' },
+  image2video: { label: '图生音视频', route: '/dashboard/image2video' },
+  text2video: { label: '文生音视频', route: '/dashboard/video' },
   audio: { label: '音频', route: '/dashboard/audio' },
   clone: { label: '语音克隆', route: '/dashboard/clone' },
-  interpolation: { label: '插帧', route: '/dashboard/interpolation' },
+  interpolation: { label: '插帧生音视频', route: '/dashboard/interpolation' },
 };
 
 const OUTPUT_EXT = {

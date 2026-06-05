@@ -33,10 +33,9 @@ export const videoModels = [
   {
     id: 'LTX-2',
     name: 'LTX 2.3',
-    description: '文生视频/图生视频（自部署）',
+    description: '文生音视频/图生音视频（自部署）',
     pipeline: 'ti2vid_two_stages_hq',
     pipelineStandard: 'ti2v_two_stage',
-    pipelineWithAudio: 'a2vid_two_stage',
     supportsImage: true,
     supportsNegativePrompt: true,
     supportsSeed: true,
@@ -59,7 +58,7 @@ export const interpolationModels = [
   {
     id: 'LTX-2-Interpolation',
     name: 'LTX 2.3',
-    description: '关键帧插帧生成平滑过渡视频（自部署）',
+    description: '关键帧插帧生音视频（自部署）',
     pipeline: 'keyframe_interpolation_two_stage',
     supportsImage: true,
     supportsNegativePrompt: true,

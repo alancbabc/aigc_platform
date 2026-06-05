@@ -1,6 +1,8 @@
 import { useState } from 'react';
 import { Outlet, useNavigate, useLocation } from 'react-router-dom';
 import { useAuth } from '../hooks/useAuth';
+import { useTasks } from '../contexts/TaskContext';
+import PromptPanel from '../components/common/PromptPanel';
 import RightPanel from '../components/panel/RightPanel';
 
 const NAV_ITEMS = [
@@ -15,22 +17,17 @@ const NAV_ITEMS = [
       <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z" />
     </svg>
   ), path: '/dashboard/image-edit' },
-  { id: 'video',   label: '文生视频', icon: (
+  { id: 'video',   label: '文生音视频', icon: (
     <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
       <polygon points="23 7 16 12 23 17 23 7" /><rect x="1" y="5" width="15" height="14" rx="2" ry="2" />
     </svg>
   ), path: '/dashboard/video' },
-  { id: 'image2video', label: '图生视频', icon: (
+  { id: 'image2video', label: '图生音视频', icon: (
     <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
       <rect x="2" y="2" width="20" height="20" rx="2.18" ry="2.18" /><polygon points="10 8 16 12 10 16 10 8" />
     </svg>
   ), path: '/dashboard/image2video' },
-  { id: 'a2v', label: '音生视频', icon: (
-    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-      <polygon points="23 7 16 12 23 17 23 7" /><rect x="1" y="5" width="15" height="14" rx="2" ry="2" /><path d="M3 19v-6" />
-    </svg>
-  ), path: '/dashboard/a2v' },
-  { id: 'interpolation', label: '插帧生成', icon: (
+  { id: 'interpolation', label: '插帧生音视频', icon: (
     <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
       <rect x="2" y="2" width="20" height="20" rx="2.18" /><circle cx="8" cy="8" r="2" /><circle cx="16" cy="16" r="2" /><line x1="8" y1="8" x2="16" y2="16" /><polyline points="8 14 8 16 10 16" /><polyline points="16 10 16 8 14 8" />
     </svg>
@@ -58,6 +55,7 @@ export default function DashboardLayout() {
   const { user, logout } = useAuth();
   const navigate = useNavigate();
   const location = useLocation();
+  const { optimizeOpen, setOptimizeOpen, optimizePanel } = useTasks();
   const [collapsed, setCollapsed] = useState(false);
 
   const currentNav = NAV_ITEMS.find(item => location.pathname === item.path)?.id;
@@ -124,9 +122,18 @@ export default function DashboardLayout() {
         </button>
       </aside>
 
-      <main className="w-1/2 min-w-0 overflow-hidden">
+      <main className="w-[45%] min-w-[420px] flex-shrink-0 overflow-hidden">
         <Outlet />
       </main>
+
+      {optimizeOpen && optimizePanel && (
+        <PromptPanel
+          prompt={optimizePanel.prompt}
+          type={optimizePanel.type}
+          onApply={optimizePanel.onApply}
+          onClose={() => setOptimizeOpen(false)}
+        />
+      )}
 
       <RightPanel />
     </div>

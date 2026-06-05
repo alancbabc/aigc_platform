@@ -25,9 +25,6 @@ export default function DashboardPage({ type }) {
       <Wrap show={type === 'image2video'}>
         <VideoStudio key="image2video" mode="image2video" />
       </Wrap>
-      <Wrap show={type === 'a2v'}>
-        <VideoStudio key="a2v" mode="a2v" />
-      </Wrap>
       <Wrap show={type === 'audio'}>
         <AudioStudio key="speech" mode="speech" />
       </Wrap>
