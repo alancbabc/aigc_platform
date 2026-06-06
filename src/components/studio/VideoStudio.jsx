@@ -26,7 +26,7 @@ export default function VideoStudio({ mode = 'text2video' }) {
   const [sid,setSid]=useState(videoModels[0].id);const [ri,setRi]=useState(null);
   const [prompt,setPrompt]=useState('');useEffect(()=>{if(loc.state?.reusePrompt)setPrompt(loc.state.reusePrompt)},[loc.key]);
   const [np,setNp]=useState('text, subtitles, lower-third, chyron, nameplate, news broadcast, TV graphics, interview, breaking news banner, character introduction overlay, manga annotation, comic annotation, text bubble, lettering artifacts, on-screen text, kana, furigana, character card, profile card, vertical text, vertical subtitles, vertical title card');const [seed,setSeed]=useState('');
-  const [res,setRes]=useState(videoModels[0].defaultResolution);const [dur,setDur]=useState(videoModels[0].defaultDuration);
+  const [res,setRes]=useState(videoModels[0].defaultResolution);const [resolutionPreset,setResolutionPreset]=useState(videoModels[0].defaultResolutionPreset);const [aspectRatio,setAspectRatio]=useState(videoModels[0].defaultAspectRatio);const [dur,setDur]=useState(videoModels[0].defaultDuration);
   const [qual,setQual]=useState(videoModels[0].defaultQuality);
   const [audio,setAudio]=useState(null);const [audioPos,setAudioPos]=useState(0);const [gn,setGn]=useState(1);
   const [gc,setGc]=useState(0);const [err,setErr]=useState(null);
@@ -37,7 +37,7 @@ export default function VideoStudio({ mode = 'text2video' }) {
 
   const gen=useCallback(async(submitPrompt,submitNeg)=>{const p=submitPrompt||prompt;const n=submitNeg!==undefined?submitNeg:np;if(!p.trim())return;const tid=_vid();addTask({id:tid,generationId:null,type:mode,prompt:p.trim(),model:cm.name,status:'generating',results:null,error:null});setGc(c=>c+1);setErr(null);showToast('任务已提交','info');
     try{const ib=ri?await readFileAsBase64(ri):undefined;const ab=audio?await readFileAsBase64(audio):undefined;
-      const d=await createGenerationAPI().video({model:cm,mode,prompt:p.trim(),image_base64:ib,negative_prompt:n.trim()||undefined,seed:seed||undefined,duration:dur,resolution:res,quality:cfg.sq?qual:undefined,audio_base64:ab,audio_insert_position:audio?audioPos:0,gen_num:gn});
+      const d=await createGenerationAPI().video({model:cm,mode,prompt:p.trim(),image_base64:ib,negative_prompt:n.trim()||undefined,seed:seed||undefined,duration:dur,resolution:res,resolution_preset:resolutionPreset,aspect_ratio:aspectRatio,quality:cfg.sq?qual:undefined,audio_base64:ab,audio_insert_position:audio?audioPos:0,gen_num:gn});
       updateTask(tid,{generationId:d.generationId||tid,status:'done',results:d.results,duration:d.duration});vbt();
       if(d.translatedPrompt&&d.translatedPrompt!==p.trim()&&prompt===p.trim())setPrompt(d.translatedPrompt);
       if(d.translationStatus==='no_key')showToast('翻译功能不可用：未配置 Gitee API Key，使用原文生成','error',6000);
@@ -45,7 +45,7 @@ export default function VideoStudio({ mode = 'text2video' }) {
       if(d.errors){setErr(`部分失败: ${d.errors.join('; ')}`);setTimeout(()=>setErr(null),10000);}
     }catch(e){updateTask(tid,{status:'failed',error:e.message});setErr(e.message);showToast(`失败: ${e.message}`,'error');setTimeout(()=>setErr(null),10000);}
     finally{setGc(c=>c-1);}
-  },[prompt,np,seed,cm,ri,dur,res,qual,audio,audioPos,gn,can,cfg.sq]);
+  },[prompt,np,seed,cm,ri,dur,res,resolutionPreset,aspectRatio,qual,audio,audioPos,gn,can,cfg.sq]);
 
   return (
     <div className="h-full flex overflow-hidden">
@@ -55,7 +55,7 @@ export default function VideoStudio({ mode = 'text2video' }) {
           <div className="flex items-center gap-2 flex-wrap">
             <ModelDropdown models={videoModels} selectedModel={sid} onSelect={(m)=>setSid(m.id)}/>
             {cfg.sq&&<SimpleDropdown title="质量" options={cm.qualities.map(q=>q.name)} selected={cm.qualities.find(q=>q.id===qual)?.name||''} onSelect={(v)=>{const q=cm.qualities.find(q=>q.name===v);if(q)setQual(q.id);}}/>}
-            <ResolutionSelector initialValue={res} options={cm.resolutions} onSelect={setRes} />
+            <ResolutionSelector initialValue={res} resolutionOptions={cm.resolutionOptions} aspectRatioOptions={cm.aspectRatioOptions} initialResolution={resolutionPreset} initialAspectRatio={aspectRatio} onSelect={(value, meta)=>{setRes(value);setResolutionPreset(meta.resolution);setAspectRatio(meta.aspectRatio);}} />
             <SimpleDropdown title="时长" options={cm.durations.map(String)} selected={String(dur)} onSelect={(v)=>setDur(parseInt(v))}/>
           </div>
           {cfg.ni&&<ImageUploader file={ri} onUpload={setRi} onClear={()=>setRi(null)}/>}

@@ -16,10 +16,13 @@ const ASPECT_RATIOS = {
 };
 
 export const RESOLUTION_LABELS = Object.keys(RESOLUTION_TARGETS);
+export const IMAGE_RESOLUTION_LABELS = ['720p', '1280p', '2K'];
+export const VIDEO_RESOLUTION_LABELS = ['540p', '720p', '1280p'];
 export const ASPECT_RATIO_LABELS = Object.keys(ASPECT_RATIOS);
 
 export function calculateResolution(resolution, aspectRatio) {
-  const targetPixels = RESOLUTION_TARGETS[resolution];
+  const normalizedResolution = normalizeResolutionLabel(resolution);
+  const targetPixels = RESOLUTION_TARGETS[normalizedResolution];
   const ratio = ASPECT_RATIOS[aspectRatio];
   if (!targetPixels || !ratio) {
     const { width, height } = parseFallbackResolution(resolution);
@@ -30,6 +33,11 @@ export function calculateResolution(resolution, aspectRatio) {
   const widthRounded = Math.round(widthIdeal / 64) * 64;
   const heightRounded = Math.round(heightIdeal / 64) * 64;
   return { width: widthRounded, height: heightRounded };
+}
+
+export function normalizeResolutionLabel(resolution) {
+  if (typeof resolution !== 'string') return resolution;
+  return resolution.toLowerCase() === '2k' ? '2K' : resolution;
 }
 
 function parseFallbackResolution(res) {

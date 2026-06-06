@@ -10,6 +10,7 @@ import { authMiddleware } from '../middleware/auth.js';
 import { addHistory } from '../services/historyStore.js';
 import { translatePrompt } from '../utils/translate.js';
 import { optimizePrompt } from '../utils/promptOptimizer.js';
+import { ASPECT_RATIO_LABELS, IMAGE_RESOLUTION_LABELS, VIDEO_RESOLUTION_LABELS, calculateResolution, normalizeResolutionLabel } from '../utils/resolution.js';
 
 export const generateRouter = Router();
 generateRouter.use(authMiddleware);
@@ -120,6 +121,15 @@ function parseSize(size) {
   return { width: w, height: h };
 }
 
+function assertDimensions(width, height, field = 'size') {
+  if (!Number.isFinite(width) || !Number.isFinite(height) || width <= 0 || height <= 0) {
+    throw httpError(`${field} must be a valid widthxheight value`);
+  }
+  if (width > 4096 || height > 4096) {
+    throw httpError(`${field} is too large`);
+  }
+}
+
 function httpError(message, statusCode = 400) {
   return Object.assign(new Error(message), { statusCode });
 }
@@ -152,8 +162,38 @@ function ensureOutputDir(username) {
 }
 
 const VALID_DURATIONS = ['3', '5', '10', '15'];
-const VALID_IMAGE_SIZES = ['1024x1024', '768x768', '1328x1328', '1024x768', '768x1024', '1536x1024', '1024x1536'];
-const VALID_RESOLUTIONS = ['1088x1920', '1024x1536', '1024x1024', '720x1280', '576x1024'];
+
+function resolveDimensions({
+  value,
+  preset,
+  aspectRatio,
+  allowedPresets,
+  defaultPreset,
+  defaultAspectRatio = '16:9',
+  field = 'resolution',
+}) {
+  const rawValue = value === undefined || value === null || value === '' ? null : String(value);
+  const selectedPreset = normalizeResolutionLabel(
+    preset || (rawValue && !rawValue.includes('x') ? rawValue : null) || (!rawValue ? defaultPreset : null)
+  );
+  if (selectedPreset) {
+    assertOneOf(selectedPreset, allowedPresets, field);
+    assertOneOf(aspectRatio || defaultAspectRatio, ASPECT_RATIO_LABELS, 'aspect_ratio');
+    return {
+      ...calculateResolution(selectedPreset, aspectRatio || defaultAspectRatio),
+      resolutionPreset: selectedPreset,
+      aspectRatio: aspectRatio || defaultAspectRatio,
+    };
+  }
+
+  const directValue = value || '';
+  if (!String(directValue).includes('x')) {
+    throw httpError(`${field} is required`);
+  }
+  const { width, height } = parseSize(String(directValue));
+  assertDimensions(width, height, field);
+  return { width, height, resolutionPreset: null, aspectRatio: null };
+}
 
 function assertInt(value, min, max, field) {
   const n = parseInt(value);
@@ -292,7 +332,7 @@ generateRouter.post('/image', async (req, res) => {
   let allTempFiles, generationId;
   const startTime = Date.now();
   try {
-    const { model, mode, prompt, size, image, images, negative_prompt, seed, num_inference_steps, gen_num } = req.body;
+    const { model, mode, prompt, size, resolution, resolution_preset, aspect_ratio, image, images, negative_prompt, seed, num_inference_steps, gen_num } = req.body;
     const username = req.user.username;
     const genCount = Math.min(Math.max(parseInt(gen_num) || 1, 1), 4);
     const modelId = modelIdOf(model, 'Qwen-Image');
@@ -302,9 +342,15 @@ generateRouter.post('/image', async (req, res) => {
       return res.status(400).json({ error: 'Prompt is required' });
     }
 
-    assertOneOf(size || '1328x1328', VALID_IMAGE_SIZES, 'size');
     const steps = assertInt(num_inference_steps || 50, 1, 100, 'num_inference_steps');
-    const { width, height } = parseSize(size || '1328x1328');
+    const { width, height, resolutionPreset, aspectRatio } = resolveDimensions({
+      value: size || resolution,
+      preset: resolution_preset,
+      aspectRatio: aspect_ratio,
+      allowedPresets: IMAGE_RESOLUTION_LABELS,
+      defaultPreset: '1280p',
+      field: 'resolution',
+    });
     const imageList = images && Array.isArray(images) && images.length > 0 ? images : (image ? [image] : []);
     const hasImage = imageList.length > 0;
     const isEditMode = mode === 'image-edit' || mode === 'image2image';
@@ -382,6 +428,8 @@ generateRouter.post('/image', async (req, res) => {
         negative_prompt: negative_prompt?.trim() || null,
         height,
         width,
+        resolution: resolutionPreset,
+        aspect_ratio: aspectRatio,
         num_inference_steps: steps,
         seed: (seed !== undefined && seed !== null && seed !== '') ? seed : null,
         pipeline_name: pipelineName,
@@ -429,7 +477,7 @@ generateRouter.post('/video', async (req, res) => {
   let allTempFiles, generationId;
   const startTime = Date.now();
   try {
-    const { model, mode, prompt, image_base64, negative_prompt, seed, duration, resolution, quality, audio_base64, audio_insert_position, gen_num } = req.body;
+    const { model, mode, prompt, image_base64, negative_prompt, seed, duration, resolution, resolution_preset, aspect_ratio, quality, audio_base64, audio_insert_position, gen_num } = req.body;
     const username = req.user.username;
     const genCount = Math.min(Math.max(parseInt(gen_num) || 1, 1), 4);
     const modelId = modelIdOf(model, 'LTX-2');
@@ -440,8 +488,14 @@ generateRouter.post('/video', async (req, res) => {
     }
 
     assertOneOf(duration, VALID_DURATIONS, 'duration');
-    assertOneOf(resolution || '1088x1920', VALID_RESOLUTIONS, 'resolution');
-    const { width, height } = parseSize(resolution || '1088x1920');
+    const { width, height, resolutionPreset, aspectRatio } = resolveDimensions({
+      value: resolution,
+      preset: resolution_preset,
+      aspectRatio: aspect_ratio,
+      allowedPresets: VIDEO_RESOLUTION_LABELS,
+      defaultPreset: '720p',
+      field: 'resolution',
+    });
     const seconds = duration || 5;
     const frameRate = 24;
     const numFrames = Math.floor(((seconds * frameRate + 7) / 8)) * 8 + 1;
@@ -542,6 +596,8 @@ generateRouter.post('/video', async (req, res) => {
         negative_prompt: negative_prompt?.trim() || null,
         height,
         width,
+        resolution: resolutionPreset,
+        aspect_ratio: aspectRatio,
         num_frames: numFrames,
         frame_rate: frameRate,
         video_seconds: seconds,
@@ -598,7 +654,7 @@ generateRouter.post('/interpolation', async (req, res) => {
   let allTempFiles, generationId;
   const startTime = Date.now();
   try {
-    const { model, prompt, frames, frame_positions, frame_strengths, negative_prompt, seed, duration, resolution, audio_base64, audio_insert_position, gen_num } = req.body;
+    const { model, prompt, frames, frame_positions, frame_strengths, negative_prompt, seed, duration, resolution, resolution_preset, aspect_ratio, audio_base64, audio_insert_position, gen_num } = req.body;
     const username = req.user.username;
     const genCount = Math.min(Math.max(parseInt(gen_num) || 1, 1), 4);
     const modelId = modelIdOf(model, 'LTX-2-Interpolation');
@@ -616,10 +672,16 @@ generateRouter.post('/interpolation', async (req, res) => {
     }
 
     assertOneOf(duration, VALID_DURATIONS, 'duration');
-    assertOneOf(resolution || '1088x1920', VALID_RESOLUTIONS, 'resolution');
     assertArrayLength(frame_positions, frames.length, 'frame_positions');
     assertArrayLength(frame_strengths, frames.length, 'frame_strengths');
-    const { width, height } = parseSize(resolution || '1088x1920');
+    const { width, height, resolutionPreset, aspectRatio } = resolveDimensions({
+      value: resolution,
+      preset: resolution_preset,
+      aspectRatio: aspect_ratio,
+      allowedPresets: VIDEO_RESOLUTION_LABELS,
+      defaultPreset: '720p',
+      field: 'resolution',
+    });
     const seconds = duration || 5;
     const frameRate = 24;
     const numFrames = Math.floor(((seconds * frameRate + 7) / 8)) * 8 + 1;
@@ -752,6 +814,8 @@ generateRouter.post('/interpolation', async (req, res) => {
         negative_prompt: negative_prompt?.trim() || null,
         height,
         width,
+        resolution: resolutionPreset,
+        aspect_ratio: aspectRatio,
         num_frames: numFrames,
         frame_rate: frameRate,
         video_seconds: seconds,

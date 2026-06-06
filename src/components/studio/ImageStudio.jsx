@@ -17,7 +17,7 @@ let _ts=0;function _tid(){return `c_${Date.now()}_${++_ts}`;}
 
 export default function ImageStudio({ mode = 'text2image' }) {
   const ie=mode==='image2image';const{addTask,updateTask,optimizeOpen,setOptimizeOpen,setOptimizePanel}=useTasks();const loc=useLocation();
-  const [sid,setSid]=useState(ie?imageModels[1].id:imageModels[0].id);const [size,setSize]=useState(imageModels[0].defaultSize);
+  const [sid,setSid]=useState(ie?imageModels[1].id:imageModels[0].id);const [size,setSize]=useState(imageModels[0].defaultSize);const [resolutionPreset,setResolutionPreset]=useState(imageModels[0].defaultResolutionPreset);const [aspectRatio,setAspectRatio]=useState(imageModels[0].defaultAspectRatio);
   const [refImgs,setRefImgs]=useState([]);const [prompt,setPrompt]=useState('');useEffect(()=>{if(loc.state?.reusePrompt)setPrompt(loc.state.reusePrompt)},[loc.key]);
   const [np,setNp]=useState('low quality, blurry, distorted, deformed, bad anatomy, extra limbs, watermark, text, signature');const [seed,setSeed]=useState('');
   const [steps,setSteps]=useState(imageModels[0].defaultInferenceSteps);const [gn,setGn]=useState(1);
@@ -28,9 +28,9 @@ export default function ImageStudio({ mode = 'text2image' }) {
   const bt=()=>{tcRef.current++;clearTimeout(ttRef.current);ttRef.current=setTimeout(()=>{showToast(`生成完成 (${tcRef.current} 个)`,'success');tcRef.current=0;},500);};
 
   const gen=useCallback(async(sp, sn)=>{const p=sp||prompt;const n=sn!==undefined?sn:np;if(!(ie?(p.trim()&&refImgs.length>0):!!p.trim()))return;const tid=_tid();addTask({id:tid,generationId:null,type:ie?'image-edit':'image',prompt:p.trim(),model:cm.name,status:'generating',results:null,error:null});setGc(c=>c+1);setErr(null);showToast('任务已提交','info');
-    try{let ib;if(refImgs.length>0)ib=await Promise.all(refImgs.map(f=>readFileAsBase64(f)));const d=await createGenerationAPI().image({model:cm,mode:ie?'image-edit':'image',prompt:p.trim(),size,images:ib,negative_prompt:n.trim()||undefined,seed:seed||undefined,num_inference_steps:steps,gen_num:gn});updateTask(tid,{generationId:d.generationId||tid,status:'done',results:d.results,duration:d.duration});bt();if(d.errors){setErr(`部分失败: ${d.errors.join('; ')}`);setTimeout(()=>setErr(null),10000);}}
+    try{let ib;if(refImgs.length>0)ib=await Promise.all(refImgs.map(f=>readFileAsBase64(f)));const d=await createGenerationAPI().image({model:cm,mode:ie?'image-edit':'image',prompt:p.trim(),size,resolution_preset:resolutionPreset,aspect_ratio:aspectRatio,images:ib,negative_prompt:n.trim()||undefined,seed:seed||undefined,num_inference_steps:steps,gen_num:gn});updateTask(tid,{generationId:d.generationId||tid,status:'done',results:d.results,duration:d.duration});bt();if(d.errors){setErr(`部分失败: ${d.errors.join('; ')}`);setTimeout(()=>setErr(null),10000);}}
     catch(e){updateTask(tid,{status:'failed',error:e.message});setErr(e.message);showToast(`失败: ${e.message}`,'error');setTimeout(()=>setErr(null),10000);}finally{setGc(c=>c-1);}
-  },[prompt,np,seed,steps,cm,size,refImgs,gn,can,ie]);
+  },[prompt,np,seed,steps,cm,size,resolutionPreset,aspectRatio,refImgs,gn,can,ie]);
 
   return (
     <div className="h-full flex overflow-hidden">
@@ -39,7 +39,7 @@ export default function ImageStudio({ mode = 'text2image' }) {
         <div className="flex-1 flex flex-col min-h-0 p-4 gap-3">
           <div className="flex items-center gap-2 flex-wrap">
             <ModelDropdown models={imageModels.filter(m=>ie?m.id==='Qwen-Image-Edit':m.id==='Qwen-Image')} selectedModel={sid} onSelect={(m)=>setSid(m.id)}/>
-            <ResolutionSelector initialValue={size} options={cm.sizes} onSelect={setSize} />
+            <ResolutionSelector initialValue={size} resolutionOptions={cm.resolutionOptions} aspectRatioOptions={cm.aspectRatioOptions} initialResolution={resolutionPreset} initialAspectRatio={aspectRatio} onSelect={(value, meta)=>{setSize(value);setResolutionPreset(meta.resolution);setAspectRatio(meta.aspectRatio);}} />
           </div>
           {ie&&<ImageUploader file={refImgs[0]} onUpload={(f)=>setRefImgs([f])} onClear={()=>setRefImgs([])} label="上传参考图片"/>}
           {cm.supportsNegativePrompt&&<NegativePromptInput value={np} onChange={setNp} placeholder="负向提示词（可选）"/>}

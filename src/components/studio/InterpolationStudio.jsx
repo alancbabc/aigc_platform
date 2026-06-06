@@ -66,6 +66,8 @@ export default function InterpolationStudio() {
   const [negativePrompt, setNegativePrompt] = useState('text, subtitles, lower-third, chyron, nameplate, news broadcast, TV graphics, interview, breaking news banner, character introduction overlay, manga annotation, comic annotation, text bubble, lettering artifacts, on-screen text, kana, furigana, character card, profile card, vertical text, vertical subtitles, vertical title card');
   const [seed] = useState('');
   const [resolution, setResolution] = useState(interpolationModels[0].defaultResolution);
+  const [resolutionPreset, setResolutionPreset] = useState(interpolationModels[0].defaultResolutionPreset);
+  const [aspectRatio, setAspectRatio] = useState(interpolationModels[0].defaultAspectRatio);
   const [duration, setDuration] = useState(interpolationModels[0].defaultDuration);
   const [frames, setFrames] = useState([]);
   const [positionText, setPositionText] = useState('');
@@ -190,6 +192,8 @@ export default function InterpolationStudio() {
         seed: seed || undefined,
         duration,
         resolution,
+        resolution_preset: resolutionPreset,
+        aspect_ratio: aspectRatio,
         audio_base64: audioPayload,
         audio_insert_position: audio ? audioPosition : 0,
         gen_num: generationCount,
@@ -213,7 +217,7 @@ export default function InterpolationStudio() {
     } finally {
       setActiveCount(count => count - 1);
     }
-  }, [prompt, negativePrompt, seed, currentModel, frames, parsedPositions, parsedStrengths, duration, resolution, audio, audioPosition, generationCount, addTask, updateTask]);
+  }, [prompt, negativePrompt, seed, currentModel, frames, parsedPositions, parsedStrengths, duration, resolution, resolutionPreset, aspectRatio, audio, audioPosition, generationCount, addTask, updateTask]);
 
   return (
     <div className="h-full flex overflow-hidden">
@@ -228,7 +232,7 @@ export default function InterpolationStudio() {
         <div className="flex-1 flex flex-col min-h-0 p-4 gap-3 overflow-y-auto custom-scrollbar">
           <div className="flex items-center gap-2 flex-wrap">
             <ModelDropdown models={interpolationModels} selectedModel={sid} onSelect={(model) => setSid(model.id)} />
-            <ResolutionSelector initialValue={resolution} options={currentModel.resolutions} onSelect={setResolution} />
+            <ResolutionSelector initialValue={resolution} resolutionOptions={currentModel.resolutionOptions} aspectRatioOptions={currentModel.aspectRatioOptions} initialResolution={resolutionPreset} initialAspectRatio={aspectRatio} onSelect={(value, meta) => { setResolution(value); setResolutionPreset(meta.resolution); setAspectRatio(meta.aspectRatio); }} />
             <SimpleDropdown title="时长" options={currentModel.durations.map(String)} selected={String(duration)} onSelect={(value) => setDuration(parseInt(value))} />
           </div>
 
