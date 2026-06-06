@@ -7,6 +7,7 @@ import SimpleDropdown from '../common/SimpleDropdown';
 import ResolutionSelector from '../common/ResolutionSelector';
 import ImageUploader from '../common/ImageUploader';
 import AudioPicker from '../common/AudioPicker';
+import AudioInsertPosition from '../common/AudioInsertPosition';
 import GenerateButton from '../common/GenerateButton';
 import PromptInput from '../common/PromptInput';
 import NegativePromptInput from '../common/NegativePromptInput';
@@ -15,7 +16,7 @@ import { readFileAsBase64 } from '../../utils/fileHelpers';
 import { useTasks } from '../../contexts/TaskContext';
 
 const CFG = {
-  text2video: { ni: false, sq: true, can: (p) => !!p.trim(), btn: '生成音视频', bo: '请输入 Prompt' },
+  text2video: { ni: false, sq: false, can: (p) => !!p.trim(), btn: '生成音视频', bo: '请输入 Prompt' },
   image2video: { ni: true, sq: false, can: (p,i) => !!p.trim()&&i, btn: '生成音视频', bo: '请上传图片并输入 Prompt' },
 };
 let _vs=0;function _vid(){return `c_${Date.now()}_${++_vs}`;}
@@ -27,7 +28,7 @@ export default function VideoStudio({ mode = 'text2video' }) {
   const [np,setNp]=useState('text, subtitles, lower-third, chyron, nameplate, news broadcast, TV graphics, interview, breaking news banner, character introduction overlay, manga annotation, comic annotation, text bubble, lettering artifacts, on-screen text, kana, furigana, character card, profile card, vertical text, vertical subtitles, vertical title card');const [seed,setSeed]=useState('');
   const [res,setRes]=useState(videoModels[0].defaultResolution);const [dur,setDur]=useState(videoModels[0].defaultDuration);
   const [qual,setQual]=useState(videoModels[0].defaultQuality);
-  const [audio,setAudio]=useState(null);const [gn,setGn]=useState(1);
+  const [audio,setAudio]=useState(null);const [audioPos,setAudioPos]=useState(0);const [gn,setGn]=useState(1);
   const [gc,setGc]=useState(0);const [err,setErr]=useState(null);
   const cm=getVideoModelById(sid);const can=cfg.can(prompt,!!ri);
   useEffect(()=>{if(optimizeOpen)setOptimizePanel({prompt,type:'video',onApply:setPrompt});},[optimizeOpen,prompt,setOptimizePanel]);
@@ -36,7 +37,7 @@ export default function VideoStudio({ mode = 'text2video' }) {
 
   const gen=useCallback(async(submitPrompt,submitNeg)=>{const p=submitPrompt||prompt;const n=submitNeg!==undefined?submitNeg:np;if(!p.trim())return;const tid=_vid();addTask({id:tid,generationId:tid,type:mode,prompt:p.trim(),model:cm.name,status:'generating',results:null,error:null});setGc(c=>c+1);setErr(null);showToast('任务已提交','info');
     try{const ib=ri?await readFileAsBase64(ri):undefined;const ab=audio?await readFileAsBase64(audio):undefined;
-      const d=await createGenerationAPI().video({model:cm,mode,prompt:p.trim(),image_base64:ib,negative_prompt:n.trim()||undefined,seed:seed||undefined,duration:dur,resolution:res,quality:cfg.sq?qual:undefined,audio_base64:ab,gen_num:gn});
+      const d=await createGenerationAPI().video({model:cm,mode,prompt:p.trim(),image_base64:ib,negative_prompt:n.trim()||undefined,seed:seed||undefined,duration:dur,resolution:res,quality:cfg.sq?qual:undefined,audio_base64:ab,audio_insert_position:audio?audioPos:0,gen_num:gn});
       updateTask(tid,{generationId:d.generationId||tid,status:'done',results:d.results,duration:d.duration});vbt();
       if(d.translatedPrompt&&d.translatedPrompt!==p.trim()&&prompt===p.trim())setPrompt(d.translatedPrompt);
       if(d.translationStatus==='no_key')showToast('翻译功能不可用：未配置 Gitee API Key，使用原文生成','error',6000);
@@ -44,7 +45,7 @@ export default function VideoStudio({ mode = 'text2video' }) {
       if(d.errors){setErr(`部分失败: ${d.errors.join('; ')}`);setTimeout(()=>setErr(null),10000);}
     }catch(e){updateTask(tid,{status:'failed',error:e.message});setErr(e.message);showToast(`失败: ${e.message}`,'error');setTimeout(()=>setErr(null),10000);}
     finally{setGc(c=>c-1);}
-  },[prompt,np,seed,cm,ri,dur,res,qual,audio,gn,can,cfg.sq]);
+  },[prompt,np,seed,cm,ri,dur,res,qual,audio,audioPos,gn,can,cfg.sq]);
 
   return (
     <div className="h-full flex overflow-hidden">
@@ -59,6 +60,7 @@ export default function VideoStudio({ mode = 'text2video' }) {
           </div>
           {cfg.ni&&<ImageUploader file={ri} onUpload={setRi} onClear={()=>setRi(null)}/>}
           <AudioPicker file={audio} onUpload={setAudio} onClear={()=>setAudio(null)} label="上传音频（可选）"/>
+          <AudioInsertPosition value={audioPos} onChange={setAudioPos} duration={dur}/>
           {cm.supportsNegativePrompt&&<NegativePromptInput value={np} onChange={setNp} placeholder="负向提示词（可选）"/>}
           <PromptInput value={prompt} onChange={setPrompt} placeholder={cfg.ni?'描述基于图片的视频动效，可选配合音频...':'描述想要的音视频内容。选择模型、质量、分辨率，可选上传音频，点击「生成音视频」'}/>
         </div>

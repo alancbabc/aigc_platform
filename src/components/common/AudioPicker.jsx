@@ -43,14 +43,14 @@ export default function AudioPicker({ file, onUpload, onClear, label = '点击�
 
   if (audioUrl) {
     return (
-      <div className="bg-white/[0.02] border border-primary/40 rounded-xl p-4">
-        <div className="flex items-center justify-between mb-3">
+      <div className="bg-white/[0.02] border border-primary/40 rounded-lg p-2">
+        <div className="flex items-center justify-between mb-1.5">
           <span className="text-xs text-white/60 truncate flex-1">{fileName}</span>
           <div className="flex gap-2">
             <button onClick={handleClear} className="text-[10px] text-red-400/60 hover:text-red-400 transition-colors">删除</button>
           </div>
         </div>
-        <audio src={audioUrl} controls className="w-full h-10" />
+        <audio src={audioUrl} controls className="w-full h-8" />
         <input ref={inputRef} type="file" accept="audio/*" className="hidden" onChange={handleChange} />
       </div>
     );
@@ -62,11 +62,11 @@ export default function AudioPicker({ file, onUpload, onClear, label = '点击�
       onDragOver={(e) => { e.preventDefault(); setDragOver(true); }}
       onDragLeave={() => setDragOver(false)}
       onDrop={(e) => { e.preventDefault(); setDragOver(false); handleFile(e.dataTransfer.files?.[0]); }}
-      className={`cursor-pointer rounded-xl border-2 border-dashed p-8 flex flex-col items-center justify-center gap-3 transition-all ${
+      className={`cursor-pointer rounded-lg border border-dashed px-3 py-2 flex items-center justify-center gap-2 min-h-14 transition-all ${
         dragOver ? 'border-primary bg-primary/5' : 'border-border hover:border-white/20 bg-white/[0.01]'
       }`}
     >
-      <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" className={dragOver ? 'text-primary' : 'text-white/15'}>
+      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" className={dragOver ? 'text-primary' : 'text-white/20'}>
         <path d="M9 18V5l12-2v13" /><circle cx="6" cy="18" r="3" /><circle cx="18" cy="16" r="3" />
       </svg>
       <p className={`text-xs text-center ${dragOver ? 'text-primary' : 'text-white/30'}`}>{label}</p>

@@ -190,11 +190,15 @@ const VIDEO_MODEL_PIPELINES = {
   'LTX-2': {
     standard: 'ti2v_two_stage',
     high: 'ti2vid_two_stages_hq',
+    audio: 'a2vid_two_stage',
   },
 };
 
 const INTERPOLATION_MODEL_PIPELINES = {
-  'LTX-2-Interpolation': 'keyframe_interpolation_two_stage',
+  'LTX-2-Interpolation': {
+    interpolation: 'keyframe_interpolation_two_stage',
+    audio: 'a2vid_two_stage',
+  },
 };
 
 const AUDIO_MODEL_PIPELINES = {
@@ -442,18 +446,12 @@ generateRouter.post('/video', async (req, res) => {
     const frameRate = 24;
     const numFrames = Math.floor(((seconds * frameRate + 7) / 8)) * 8 + 1;
     const hasAudio = !!audio_base64;
+    const audioInsertPosition = assertInt(audio_insert_position ?? 0, 0, 100, 'audio_insert_position');
     const hasImage = !!image_base64;
     const generationType = hasImage || mode === 'image2video' ? 'image2video' : 'video';
 
-    let pipelineName;
-    if (hasImage) {
-      pipelineName = pipelines.standard;
-    } else if (quality === 'standard' || quality === 'ti2v_two_stage') {
-      pipelineName = pipelines.standard;
-    } else {
-      pipelineName = pipelines.high;
-    }
-    const videoSteps = pipelineName === 'ti2vid_two_stages_hq' ? 15 : 30;
+    const pipelineName = hasAudio ? pipelines.audio : pipelines.high;
+    const videoSteps = hasAudio ? 30 : 15;
 
     const originalPrompt = prompt.trim();
     const { text: videoPrompt, status: translationStatus } = await translatePrompt(originalPrompt);
@@ -502,7 +500,7 @@ generateRouter.post('/video', async (req, res) => {
           contentType: audioMime,
         });
         form.append('a2v_audio_start_time', '0.0');
-        const insertTime = (seconds * (audio_insert_position || 0)) / 100;
+        const insertTime = (seconds * audioInsertPosition) / 100;
         form.append('a2v_audio_insert_video_time', String(insertTime));
       }
 
@@ -551,7 +549,7 @@ generateRouter.post('/video', async (req, res) => {
         seed: (seed !== undefined && seed !== null && seed !== '') ? seed : null,
         pipeline_name: pipelineName,
         has_audio: hasAudio,
-        audio_insert_position: audio_insert_position || 0,
+        audio_insert_position: audioInsertPosition,
         gen_num: genCount,
       },
       results,
@@ -600,11 +598,11 @@ generateRouter.post('/interpolation', async (req, res) => {
   let allTempFiles, generationId;
   const startTime = Date.now();
   try {
-    const { model, prompt, frames, frame_positions, frame_strengths, negative_prompt, seed, duration, resolution, gen_num } = req.body;
+    const { model, prompt, frames, frame_positions, frame_strengths, negative_prompt, seed, duration, resolution, audio_base64, audio_insert_position, gen_num } = req.body;
     const username = req.user.username;
     const genCount = Math.min(Math.max(parseInt(gen_num) || 1, 1), 4);
     const modelId = modelIdOf(model, 'LTX-2-Interpolation');
-    const pipelineName = assertKnown(modelId, INTERPOLATION_MODEL_PIPELINES);
+    const pipelines = assertKnown(modelId, INTERPOLATION_MODEL_PIPELINES);
 
     if (!prompt?.trim()) {
       return res.status(400).json({ error: 'Prompt is required' });
@@ -625,6 +623,9 @@ generateRouter.post('/interpolation', async (req, res) => {
     const seconds = duration || 5;
     const frameRate = 24;
     const numFrames = Math.floor(((seconds * frameRate + 7) / 8)) * 8 + 1;
+    const hasAudio = !!audio_base64;
+    const audioInsertPosition = assertInt(audio_insert_position ?? 0, 0, 100, 'audio_insert_position');
+    const pipelineName = hasAudio ? pipelines.audio : pipelines.interpolation;
 
     const originalPrompt = prompt.trim();
     const { text: interpPrompt, status: interpTranslation } = await translatePrompt(originalPrompt);
@@ -656,6 +657,11 @@ generateRouter.post('/interpolation', async (req, res) => {
     for (const pos of positions) {
       if (pos < 0 || pos >= numFrames) throw httpError(`frame position ${pos} out of range (0-${numFrames - 1})`);
     }
+    for (let i = 1; i < positions.length; i++) {
+      if (positions[i] <= positions[i - 1]) {
+        throw httpError('frame_positions must be strictly increasing');
+      }
+    }
 
     let strengths = [];
     if (frame_strengths && Array.isArray(frame_strengths)) {
@@ -679,7 +685,7 @@ generateRouter.post('/interpolation', async (req, res) => {
       form.append('width', String(width));
       form.append('num_frames', String(numFrames));
       form.append('frame_rate', String(frameRate));
-      form.append('num_inference_steps', '15');
+      form.append('num_inference_steps', hasAudio ? '30' : '15');
       form.append('pipeline_name', pipelineName);
       if (negative_prompt?.trim()) form.append('negative_prompt', negative_prompt.trim());
       if (seed !== undefined && seed !== null && seed !== '') form.append('seed', String(seed));
@@ -694,6 +700,18 @@ generateRouter.post('/interpolation', async (req, res) => {
         form.append('image_idxs', String(positions[i]));
         form.append('image_strengths', String(strengths[i]));
         form.append('image_crfs', '0');
+      }
+
+      if (hasAudio) {
+        const { path: audioTmpPath, mime: audioMime } = base64ToTempFile(audio_base64, 'wav', ['audio/wav', 'audio/x-wav', 'audio/mpeg', 'audio/mp3']);
+        allTempFiles.push(audioTmpPath);
+        form.append('a2v_audio_path', fs.createReadStream(audioTmpPath), {
+          filename: 'input_audio.' + audioMime.split('/')[1],
+          contentType: audioMime,
+        });
+        form.append('a2v_audio_start_time', '0.0');
+        const insertTime = (seconds * audioInsertPosition) / 100;
+        form.append('a2v_audio_insert_video_time', String(insertTime));
       }
 
       const filename = generateFilename(timestamp, 'interp', g, 'mp4');
@@ -737,10 +755,12 @@ generateRouter.post('/interpolation', async (req, res) => {
         num_frames: numFrames,
         frame_rate: frameRate,
         video_seconds: seconds,
-        num_inference_steps: 15,
+        num_inference_steps: hasAudio ? 30 : 15,
         seed: (seed !== undefined && seed !== null && seed !== '') ? seed : null,
         pipeline_name: pipelineName,
         keyframe_count: frames.length,
+        has_audio: hasAudio,
+        audio_insert_position: audioInsertPosition,
         gen_num: genCount,
       },
       results,
