@@ -35,7 +35,7 @@ export default function VideoStudio({ mode = 'text2video' }) {
   const vcRef=useRef(0),vtRef=useRef(0);
   const vbt=()=>{vcRef.current++;clearTimeout(vtRef.current);vtRef.current=setTimeout(()=>{showToast(`生成完成 (${vcRef.current} 个)`,'success');vcRef.current=0;},500);};
 
-  const gen=useCallback(async(submitPrompt,submitNeg)=>{const p=submitPrompt||prompt;const n=submitNeg!==undefined?submitNeg:np;if(!p.trim())return;const tid=_vid();addTask({id:tid,generationId:tid,type:mode,prompt:p.trim(),model:cm.name,status:'generating',results:null,error:null});setGc(c=>c+1);setErr(null);showToast('任务已提交','info');
+  const gen=useCallback(async(submitPrompt,submitNeg)=>{const p=submitPrompt||prompt;const n=submitNeg!==undefined?submitNeg:np;if(!p.trim())return;const tid=_vid();addTask({id:tid,generationId:null,type:mode,prompt:p.trim(),model:cm.name,status:'generating',results:null,error:null});setGc(c=>c+1);setErr(null);showToast('任务已提交','info');
     try{const ib=ri?await readFileAsBase64(ri):undefined;const ab=audio?await readFileAsBase64(audio):undefined;
       const d=await createGenerationAPI().video({model:cm,mode,prompt:p.trim(),image_base64:ib,negative_prompt:n.trim()||undefined,seed:seed||undefined,duration:dur,resolution:res,quality:cfg.sq?qual:undefined,audio_base64:ab,audio_insert_position:audio?audioPos:0,gen_num:gn});
       updateTask(tid,{generationId:d.generationId||tid,status:'done',results:d.results,duration:d.duration});vbt();

@@ -164,7 +164,7 @@ export default function InterpolationStudio() {
     const id = taskId();
     addTask({
       id,
-      generationId: id,
+      generationId: null,
       type: 'interpolation',
       prompt: p.trim(),
       model: currentModel.name,

@@ -28,7 +28,7 @@ export default function AudioStudio({ mode = 'speech' }) {
   const acRef=useRef(0),atRef=useRef(0);
   const abt=()=>{acRef.current++;clearTimeout(atRef.current);atRef.current=setTimeout(()=>{showToast(`生成完成 (${acRef.current} 个)`,'success');acRef.current=0;},500);};
 
-  const gen=useCallback(async(sp)=>{const p=sp||inputs;const tts=getAudioModelById('Qwen3-TTS'),idx=getAudioModelById('IndexTTS-2');if(!(ic?(!!p.trim()&&!!ra):!!p.trim()))return;const tid=_aid();addTask({id:tid,generationId:tid,type:mode,prompt:p.trim(),model:ic?idx.name:tts.name,status:'generating',results:null,error:null});setGc(c=>c+1);setErr(null);showToast('任务已提交','info');
+  const gen=useCallback(async(sp)=>{const p=sp||inputs;const tts=getAudioModelById('Qwen3-TTS'),idx=getAudioModelById('IndexTTS-2');if(!(ic?(!!p.trim()&&!!ra):!!p.trim()))return;const tid=_aid();addTask({id:tid,generationId:null,type:mode,prompt:p.trim(),model:ic?idx.name:tts.name,status:'generating',results:null,error:null});setGc(c=>c+1);setErr(null);showToast('任务已提交','info');
     try{const params={model:ic?idx:tts,mode:ic?'clone':'audio',inputs:p.trim()};
       if(ic){if(ra)params.ref_audio_base64=await readFileAsBase64(ra);if(emoMode==='random'){params.use_random=true;}else if(emoMode==='vector'){params.emo_vector=ev;}else if(emoMode==='text'){if(et.trim())params.emo_text=et.trim();}else if(emoMode==='audio'){if(ea)params.emo_audio_base64=await readFileAsBase64(ea);}}
       else{params.language=lang;if(vd){params.pipeline='qwen_tts_voicedesign';if(instr.trim())params.instruct=instr.trim();}else{params.speaker=speaker;if(instr.trim())params.instruct=instr.trim();}}

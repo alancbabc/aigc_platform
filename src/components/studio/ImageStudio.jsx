@@ -27,7 +27,7 @@ export default function ImageStudio({ mode = 'text2image' }) {
   const tcRef=useRef(0),ttRef=useRef(0);
   const bt=()=>{tcRef.current++;clearTimeout(ttRef.current);ttRef.current=setTimeout(()=>{showToast(`生成完成 (${tcRef.current} 个)`,'success');tcRef.current=0;},500);};
 
-  const gen=useCallback(async(sp, sn)=>{const p=sp||prompt;const n=sn!==undefined?sn:np;if(!(ie?(p.trim()&&refImgs.length>0):!!p.trim()))return;const tid=_tid();addTask({id:tid,generationId:tid,type:ie?'image-edit':'image',prompt:p.trim(),model:cm.name,status:'generating',results:null,error:null});setGc(c=>c+1);setErr(null);showToast('任务已提交','info');
+  const gen=useCallback(async(sp, sn)=>{const p=sp||prompt;const n=sn!==undefined?sn:np;if(!(ie?(p.trim()&&refImgs.length>0):!!p.trim()))return;const tid=_tid();addTask({id:tid,generationId:null,type:ie?'image-edit':'image',prompt:p.trim(),model:cm.name,status:'generating',results:null,error:null});setGc(c=>c+1);setErr(null);showToast('任务已提交','info');
     try{let ib;if(refImgs.length>0)ib=await Promise.all(refImgs.map(f=>readFileAsBase64(f)));const d=await createGenerationAPI().image({model:cm,mode:ie?'image-edit':'image',prompt:p.trim(),size,images:ib,negative_prompt:n.trim()||undefined,seed:seed||undefined,num_inference_steps:steps,gen_num:gn});updateTask(tid,{generationId:d.generationId||tid,status:'done',results:d.results,duration:d.duration});bt();if(d.errors){setErr(`部分失败: ${d.errors.join('; ')}`);setTimeout(()=>setErr(null),10000);}}
     catch(e){updateTask(tid,{status:'failed',error:e.message});setErr(e.message);showToast(`失败: ${e.message}`,'error');setTimeout(()=>setErr(null),10000);}finally{setGc(c=>c-1);}
   },[prompt,np,seed,steps,cm,size,refImgs,gn,can,ie]);
