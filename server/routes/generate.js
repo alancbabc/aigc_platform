@@ -162,6 +162,7 @@ function ensureOutputDir(username) {
 }
 
 const VALID_DURATIONS = ['3', '5', '10', '15'];
+const DEFAULT_KEYFRAME_STRENGTH = 0.85;
 
 function resolveDimensions({
   value,
@@ -733,7 +734,7 @@ generateRouter.post('/interpolation', async (req, res) => {
         return val;
       });
     } else {
-      strengths = frames.map(() => 1.0);
+      strengths = frames.map(() => DEFAULT_KEYFRAME_STRENGTH);
     }
 
     const outputDir = ensureOutputDir(username);

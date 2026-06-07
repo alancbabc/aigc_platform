@@ -18,6 +18,7 @@ let seq = 0;
 function taskId() { return `c_${Date.now()}_${++seq}`; }
 
 const MAX_FRAMES = 10;
+const DEFAULT_FRAME_STRENGTH = 0.85;
 
 function clamp(value, min, max) {
   const n = Number(value);
@@ -32,7 +33,7 @@ function defaultPosition(index, total) {
 
 function defaultsForCount(count, type) {
   return Array.from({ length: count }, (_, index) => (
-    type === 'position' ? defaultPosition(index, count) : 1
+    type === 'position' ? defaultPosition(index, count) : DEFAULT_FRAME_STRENGTH
   ));
 }
 
