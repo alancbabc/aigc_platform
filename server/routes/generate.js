@@ -8,6 +8,7 @@ import { v4 as uuidv4 } from 'uuid';
 import { config } from '../config.js';
 import { authMiddleware } from '../middleware/auth.js';
 import { addHistory } from '../services/historyStore.js';
+import { loadGeneration, saveGenerationSoon } from '../services/taskStore.js';
 import { translatePrompt } from '../utils/translate.js';
 import { optimizePrompt } from '../utils/promptOptimizer.js';
 import { ASPECT_RATIO_LABELS, IMAGE_RESOLUTION_LABELS, VIDEO_RESOLUTION_LABELS, calculateResolution, normalizeResolutionLabel } from '../utils/resolution.js';
@@ -23,17 +24,22 @@ function createGenerationId() {
 }
 
 function trackTask(generationId, userId) {
-  activeTasks.set(generationId, {
+  const generation = {
     userId,
     tasks: [],
     cancelled: false,
     createdAt: Date.now(),
-  });
+  };
+  activeTasks.set(generationId, generation);
+  saveGenerationSoon(generationId, generation);
 }
 
 function registerTaskId(generationId, taskId) {
   const gen = activeTasks.get(generationId);
-  if (gen) gen.tasks.push({ taskId, status: 'submitted', error: null });
+  if (gen) {
+    gen.tasks.push({ taskId, status: 'submitted', error: null });
+    saveGenerationSoon(generationId, gen);
+  }
 }
 
 function updateTaskStatus(generationId, taskId, status, error) {
@@ -43,6 +49,7 @@ function updateTaskStatus(generationId, taskId, status, error) {
   if (task) {
     task.status = status;
     if (error) task.error = error;
+    saveGenerationSoon(generationId, gen);
   }
 }
 
@@ -53,13 +60,15 @@ function finishGeneration(generationId, error = null, payload = {}) {
   gen.error = error;
   gen.finishedAt = Date.now();
   Object.assign(gen, payload);
+  saveGenerationSoon(generationId, gen);
   setTimeout(() => activeTasks.delete(generationId), 10 * 60 * 1000).unref?.();
 }
 
 function cancelGeneration(generationId, username) {
-  const gen = activeTasks.get(generationId);
+  const gen = activeTasks.get(generationId) || loadGeneration(username, generationId);
   if (gen && gen.userId === username) {
     gen.cancelled = true;
+    saveGenerationSoon(generationId, gen);
   }
 }
 
@@ -68,7 +77,7 @@ function isGenerationCancelled(generationId) {
 }
 
 function getGenerationForUser(generationId, username) {
-  const gen = activeTasks.get(generationId);
+  const gen = activeTasks.get(generationId) || loadGeneration(username, generationId);
   if (!gen || gen.userId !== username) return null;
   return gen;
 }
@@ -210,10 +219,18 @@ function assertOneOf(value, list, field) {
   }
 }
 
-function assertArrayLength(value, expected, field) {
-  if (value && (!Array.isArray(value) || value.length !== expected)) {
-    throw httpError(`${field} count must match uploaded frames count`);
+function parseNumberList(value, invalidMessage) {
+  if (value === undefined || value === null || value === '') return null;
+  const items = Array.isArray(value) ? value : String(value).split(',');
+  const values = [];
+  for (const item of items) {
+    const raw = String(item).trim();
+    if (!raw || !/^-?(?:\d+\.?\d*|\.\d+)$/.test(raw)) throw httpError(invalidMessage);
+    const parsed = Number(raw);
+    if (!Number.isFinite(parsed)) throw httpError(invalidMessage);
+    values.push(parsed);
   }
+  return values;
 }
 
 const IMAGE_MODEL_PIPELINES = {
@@ -673,8 +690,6 @@ generateRouter.post('/interpolation', async (req, res) => {
     }
 
     assertOneOf(duration, VALID_DURATIONS, 'duration');
-    assertArrayLength(frame_positions, frames.length, 'frame_positions');
-    assertArrayLength(frame_strengths, frames.length, 'frame_strengths');
     const { width, height, resolutionPreset, aspectRatio } = resolveDimensions({
       value: resolution,
       preset: resolution_preset,
@@ -701,11 +716,19 @@ generateRouter.post('/interpolation', async (req, res) => {
     res.on('finish', () => { res.removeListener('close', cancelGenI); });
 
     let positions = [];
-    if (frame_positions && Array.isArray(frame_positions)) {
-      positions = frame_positions.map(p => {
-        const val = parseFloat(p) / 100;
-        if (Number.isNaN(val) || val < 0 || val > 1) throw httpError('frame_positions must be numbers from 0 to 100');
-        return Math.round((numFrames - 1) * val);
+    const parsedFramePositions = parseNumberList(
+      frame_positions,
+      'Please enter valid key frame position percentages separated by commas'
+    );
+    if (parsedFramePositions) {
+      const validPositions = parsedFramePositions.filter(p => p >= 0 && p <= 100);
+      if (validPositions.length !== frames.length) {
+        throw httpError(`key frame count (${frames.length}) does not match position count (${validPositions.length})`);
+      }
+      positions = validPositions.map(p => {
+        const relative = p / 100;
+        const normalized = relative === 1 ? relative - 10e-16 : relative;
+        return Math.round((numFrames - 1) * normalized);
       });
     } else {
       const n = frames.length;
@@ -727,12 +750,15 @@ generateRouter.post('/interpolation', async (req, res) => {
     }
 
     let strengths = [];
-    if (frame_strengths && Array.isArray(frame_strengths)) {
-      strengths = frame_strengths.map(s => {
-        const val = parseFloat(s);
-        if (Number.isNaN(val) || val < 0 || val > 1) throw httpError('frame_strengths must be numbers from 0 to 1');
-        return val;
-      });
+    const parsedFrameStrengths = parseNumberList(
+      frame_strengths,
+      'Please enter valid key frame strengths separated by commas'
+    );
+    if (parsedFrameStrengths) {
+      strengths = parsedFrameStrengths.filter(s => s >= 0 && s <= 1);
+      if (strengths.length !== frames.length) {
+        throw httpError(`key frame count (${frames.length}) does not match strength count (${strengths.length})`);
+      }
     } else {
       strengths = frames.map(() => DEFAULT_KEYFRAME_STRENGTH);
     }

@@ -1,4 +1,4 @@
-import { useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 
 const MAX_FILE_SIZE = 20 * 1024 * 1024;
 
@@ -17,19 +17,23 @@ export default function UploadButton({ onUpload, onClear, accept = 'image/*', la
   const inputRef = useRef(null);
   const isAudio = accept?.startsWith('audio');
 
+  useEffect(() => () => {
+    if (file?.url && file.url.startsWith('blob:')) URL.revokeObjectURL(file.url);
+  }, [file?.url]);
+
   const handleChange = async (e) => {
-    const f = e.target.files?.[0];
-    if (!f) return;
+    const nextFile = e.target.files?.[0];
+    if (!nextFile) return;
     e.target.value = '';
     setFileError(null);
-    if (f.size > MAX_FILE_SIZE) {
+    if (nextFile.size > MAX_FILE_SIZE) {
       setFileError(`文件超过大小限制 (${Math.round(MAX_FILE_SIZE / 1024 / 1024)}MB)`);
       return;
     }
     setUploading(true);
-    const previewUrl = isAudio ? null : URL.createObjectURL(f);
-    setFile({ name: f.name, url: previewUrl, file: f });
-    onUpload?.(f);
+    const previewUrl = isAudio ? null : URL.createObjectURL(nextFile);
+    setFile({ name: nextFile.name, url: previewUrl, file: nextFile });
+    onUpload?.(nextFile);
     setUploading(false);
   };
 
@@ -53,7 +57,7 @@ export default function UploadButton({ onUpload, onClear, accept = 'image/*', la
             onClick={handleClear}
             className="absolute inset-0 bg-black/60 opacity-0 group-hover:opacity-100 flex items-center justify-center transition-opacity"
           >
-            <span className="text-white text-xs font-bold">✕</span>
+            <span className="text-white text-xs font-bold">×</span>
           </button>
         </div>
       ) : (
@@ -84,7 +88,7 @@ export default function UploadButton({ onUpload, onClear, accept = 'image/*', la
           onClick={handleClear}
           className="absolute -top-1 -right-1 w-4 h-4 bg-red-500 rounded-full flex items-center justify-center text-white text-[8px]"
         >
-          ✕
+          ×
         </button>
       )}
       {fileError && (

@@ -10,7 +10,7 @@ export default function ResultDisplay({ url, type = 'image', onDownload }) {
     switch (type) {
       case 'video':
         return (
-          <video src={mediaUrl} controls autoPlay loop muted className="w-full h-full object-contain" />
+          <video src={mediaUrl} controls autoPlay loop muted preload="metadata" className="w-full h-full object-contain" />
         );
       case 'audio':
         return (
@@ -19,12 +19,12 @@ export default function ResultDisplay({ url, type = 'image', onDownload }) {
               <div className="w-20 h-20 bg-primary/10 rounded-2xl flex items-center justify-center text-4xl">
                 🎵
               </div>
-              <audio src={mediaUrl} controls className="w-64" />
+              <audio src={mediaUrl} controls preload="metadata" className="w-64" />
             </div>
           </div>
         );
       default:
-        return <img src={mediaUrl} alt="Generated result" className="w-full h-full object-contain" />;
+        return <img src={mediaUrl} alt="Generated result" className="w-full h-full object-contain" loading="lazy" decoding="async" />;
     }
   };
 
@@ -62,7 +62,7 @@ export default function ResultDisplay({ url, type = 'image', onDownload }) {
       {fullscreen && (
         <FullscreenModal onClose={() => setFullscreen(false)}>
           {type === 'image' && (
-            <img src={mediaUrl} alt="Fullscreen" className="max-w-full max-h-full rounded-xl shadow-4xl" />
+            <img src={mediaUrl} alt="Fullscreen" className="max-w-full max-h-full rounded-xl shadow-4xl" loading="lazy" decoding="async" />
           )}
           {type === 'video' && (
             <video src={mediaUrl} controls autoPlay className="max-w-full max-h-full rounded-xl shadow-4xl" />

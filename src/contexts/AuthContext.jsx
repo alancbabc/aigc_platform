@@ -1,5 +1,5 @@
 import { createContext, useState, useEffect, useCallback } from 'react';
-import { apiPost } from '../api/client';
+import { apiPost, historyAPI } from '../api/client';
 
 export const AuthContext = createContext(null);
 
@@ -48,6 +48,7 @@ export function AuthProvider({ children }) {
   }, []);
 
   const saveAuth = useCallback((userData, authToken) => {
+    historyAPI.clearCache();
     setUser(userData);
     setToken(authToken);
     localStorage.setItem(STORAGE_KEY, JSON.stringify({
@@ -69,6 +70,7 @@ export function AuthProvider({ children }) {
   }, [saveAuth]);
 
   const logout = useCallback(() => {
+    historyAPI.clearCache();
     setUser(null);
     setToken(null);
     localStorage.removeItem(STORAGE_KEY);

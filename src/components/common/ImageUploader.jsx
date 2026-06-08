@@ -1,4 +1,5 @@
-import { useRef, useState, useEffect } from 'react';
+import { useRef, useState } from 'react';
+import useObjectUrl from '../../hooks/useObjectUrl';
 import { showToast } from './Toast';
 
 const MAX_FILE_SIZE = 20 * 1024 * 1024;
@@ -6,22 +7,15 @@ const MAX_FILE_SIZE = 20 * 1024 * 1024;
 export default function ImageUploader({ file, onUpload, onClear, label = '点击或拖拽上传图片' }) {
   const inputRef = useRef(null);
   const [dragOver, setDragOver] = useState(false);
-  const [previewUrl, setPreviewUrl] = useState(null);
+  const previewUrl = useObjectUrl(file);
 
-  useEffect(() => {
-    if (file) {
-      const url = URL.createObjectURL(file);
-      setPreviewUrl(url);
-      return () => URL.revokeObjectURL(url);
+  const handleFile = (nextFile) => {
+    if (!nextFile) return;
+    if (nextFile.size > MAX_FILE_SIZE) {
+      showToast('文件大小不能超过 20MB', 'error');
+      return;
     }
-  }, [file]);
-
-  const handleFile = (f) => {
-    if (!f) return;
-    if (f.size > MAX_FILE_SIZE) { showToast('文件大小不能超过 20MB', 'error'); return; }
-    const url = URL.createObjectURL(f);
-    setPreviewUrl(url);
-    onUpload?.(f);
+    onUpload?.(nextFile);
   };
 
   const handleChange = (e) => {
@@ -31,8 +25,6 @@ export default function ImageUploader({ file, onUpload, onClear, label = '点击
 
   const handleClear = (e) => {
     e.stopPropagation();
-    if (previewUrl) URL.revokeObjectURL(previewUrl);
-    setPreviewUrl(null);
     onClear?.();
   };
 

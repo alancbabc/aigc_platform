@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { historyAPI } from '../../api/client';
 import HistoryCard from './HistoryCard';
 import HistoryDetail from './HistoryDetail';
@@ -6,33 +6,66 @@ import LoadingSpinner from '../common/LoadingSpinner';
 import EmptyState from '../common/EmptyState';
 import ConfirmModal from '../common/ConfirmModal';
 
+const PAGE_SIZE = 60;
+const FILTER_TYPES = {
+  image: ['image', 'image-edit'],
+  video: ['video', 'image2video', 'a2v', 'interpolation'],
+  audio: ['audio', 'clone'],
+};
+
 export default function HistoryGrid() {
   const [history, setHistory] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [loadingMore, setLoadingMore] = useState(false);
   const [filter, setFilter] = useState('all');
   const [selectedItem, setSelectedItem] = useState(null);
   const [deleteConfirm, setDeleteConfirm] = useState(null);
   const [error, setError] = useState(null);
+  const [nextCursor, setNextCursor] = useState(null);
+  const [hasMore, setHasMore] = useState(false);
+  const [total, setTotal] = useState(0);
+  const requestIdRef = useRef(0);
 
-  const fetchHistory = useCallback(async () => {
-    setLoading(true);
+  const fetchHistory = useCallback(async ({ cursor = null, append = false, force = false } = {}) => {
+    const requestId = requestIdRef.current + 1;
+    requestIdRef.current = requestId;
+    if (append) setLoadingMore(true);
+    else setLoading(true);
     setError(null);
     try {
-      const data = await historyAPI.getAll();
-      setHistory(data.history || []);
+      const type = filter === 'all' ? null : FILTER_TYPES[filter]?.join(',');
+      const data = await historyAPI.getAll(
+        { limit: PAGE_SIZE, ...(cursor ? { cursor } : {}), ...(type ? { type } : {}) },
+        { force }
+      );
+      if (requestId !== requestIdRef.current) return;
+      const items = data.history || [];
+      setHistory(prev => {
+        if (!append) return items;
+        const seen = new Set(prev.map(item => item.id));
+        return [...prev, ...items.filter(item => !seen.has(item.id))];
+      });
+      setNextCursor(data.nextCursor || null);
+      setHasMore(Boolean(data.hasMore));
+      setTotal(data.total || 0);
     } catch (err) {
+      if (requestId !== requestIdRef.current) return;
       setError(err.message);
     } finally {
-      setLoading(false);
+      if (requestId === requestIdRef.current) {
+        setLoading(false);
+        setLoadingMore(false);
+      }
     }
-  }, []);
+  }, [filter]);
 
-  useEffect(() => { fetchHistory(); }, [fetchHistory]);
+  useEffect(() => { fetchHistory({ force: true }); }, [fetchHistory]);
 
   const handleDelete = async (id) => {
     try {
       await historyAPI.delete(id);
       setHistory(prev => prev.filter(h => h.id !== id));
+      setTotal(prev => Math.max(prev - 1, 0));
       if (selectedItem?.id === id) setSelectedItem(null);
     } catch (err) {
       setError(err.message);
@@ -40,16 +73,6 @@ export default function HistoryGrid() {
       setDeleteConfirm(null);
     }
   };
-
-  const filterTypes = {
-    image: ['image', 'image-edit'],
-    video: ['video', 'image2video', 'a2v', 'interpolation'],
-    audio: ['audio', 'clone'],
-  };
-
-  const filtered = filter === 'all'
-    ? history
-    : history.filter(h => filterTypes[filter]?.includes(h.type));
 
   const filters = [
     { id: 'all', label: '全部' },
@@ -80,7 +103,7 @@ export default function HistoryGrid() {
             </button>
           ))}
         </div>
-        <span className="text-xs text-white/30 ml-auto">{filtered.length} 条记录</span>
+        <span className="text-xs text-white/30 ml-auto">{history.length}/{total} 条记录</span>
       </div>
 
       {deleteConfirm && (
@@ -99,7 +122,7 @@ export default function HistoryGrid() {
         </div>
       )}
 
-      {filtered.length === 0 ? (
+      {history.length === 0 ? (
         <EmptyState
           icon="📭"
           title="暂无作品"
@@ -108,7 +131,7 @@ export default function HistoryGrid() {
       ) : (
         <div className="flex-1 overflow-y-auto custom-scrollbar">
           <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-4">
-            {filtered.map(item => (
+            {history.map(item => (
               <HistoryCard
                 key={item.id}
                 item={item}
@@ -117,6 +140,15 @@ export default function HistoryGrid() {
               />
             ))}
           </div>
+          {hasMore && (
+            <button
+              onClick={() => fetchHistory({ cursor: nextCursor, append: true })}
+              disabled={loadingMore}
+              className="w-full mt-4 py-2 text-xs text-white/40 hover:text-white/70 rounded-lg hover:bg-white/[0.03] transition-colors disabled:opacity-40"
+            >
+              {loadingMore ? '加载中...' : `加载更多 (${Math.max(total - history.length, 0)} 项剩余)`}
+            </button>
+          )}
         </div>
       )}
 

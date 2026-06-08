@@ -1,6 +1,13 @@
 import { useRef, useEffect } from 'react';
 
-export default function PromptInput({ value, onChange, placeholder, disabled }) {
+export default function PromptInput({
+  value,
+  onChange,
+  placeholder,
+  disabled,
+  label = 'Prompt',
+  helpText = '描述希望生成或编辑的主体、画面、动作、风格和细节；内容越具体，生成结果越可控。',
+}) {
   const textareaRef = useRef(null);
 
   const handleInput = (e) => {
@@ -19,6 +26,12 @@ export default function PromptInput({ value, onChange, placeholder, disabled }) 
 
   return (
     <div className="w-full">
+      {(label || helpText) && (
+        <div className="mb-1.5 px-0.5">
+          {label && <div className="text-[11px] font-medium text-white/55">{label}</div>}
+          {helpText && <div className="mt-0.5 text-[10px] leading-4 text-white/30">{helpText}</div>}
+        </div>
+      )}
       <textarea
         ref={textareaRef}
         value={value}

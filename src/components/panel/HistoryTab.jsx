@@ -1,10 +1,11 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { historyAPI, getMediaUrl } from '../../api/client';
 import { downloadResult } from '../../utils/download';
 import { useTasks } from '../../contexts/TaskContext';
 import ConfirmModal from '../common/ConfirmModal';
 import LoadingSpinner from '../common/LoadingSpinner';
+import VideoThumbnail from '../common/VideoThumbnail';
 
 const TYPE_CONFIG = {
   image: { label: '图片', route: '/dashboard/image' },
@@ -21,34 +22,60 @@ const OUTPUT_EXT = {
   image: 'png', 'image-edit': 'png', video: 'mp4', image2video: 'mp4', a2v: 'mp4', audio: 'wav', clone: 'wav', interpolation: 'mp4',
 };
 
+const PAGE_SIZE = 30;
+
 export default function HistoryTab() {
   const [history, setHistory] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [loadingMore, setLoadingMore] = useState(false);
   const [error, setError] = useState(null);
   const [deleteTarget, setDeleteTarget] = useState(null);
-  const [showCount, setShowCount] = useState(50);
+  const [nextCursor, setNextCursor] = useState(null);
+  const [hasMore, setHasMore] = useState(false);
+  const [total, setTotal] = useState(0);
+  const requestIdRef = useRef(0);
   const navigate = useNavigate();
   const { historyVersion, notifyHistoryChange } = useTasks();
 
-  const fetchHistory = useCallback(async () => {
-    setLoading(true);
+  const fetchHistory = useCallback(async ({ cursor = null, append = false, force = false } = {}) => {
+    const requestId = requestIdRef.current + 1;
+    requestIdRef.current = requestId;
+    if (append) setLoadingMore(true);
+    else setLoading(true);
     setError(null);
     try {
-      const data = await historyAPI.getAll();
-      setHistory(data.history || []);
+      const data = await historyAPI.getAll(
+        { limit: PAGE_SIZE, ...(cursor ? { cursor } : {}) },
+        { force }
+      );
+      if (requestId !== requestIdRef.current) return;
+      const items = data.history || [];
+      setHistory(prev => {
+        if (!append) return items;
+        const seen = new Set(prev.map(item => item.id));
+        return [...prev, ...items.filter(item => !seen.has(item.id))];
+      });
+      setNextCursor(data.nextCursor || null);
+      setHasMore(Boolean(data.hasMore));
+      setTotal(data.total || 0);
     } catch (err) {
+      if (requestId !== requestIdRef.current) return;
       setError(err.message);
     } finally {
-      setLoading(false);
+      if (requestId === requestIdRef.current) {
+        setLoading(false);
+        setLoadingMore(false);
+      }
     }
   }, []);
 
-  useEffect(() => { fetchHistory(); }, [fetchHistory, historyVersion]);
+  useEffect(() => { fetchHistory({ force: historyVersion > 0 }); }, [fetchHistory, historyVersion]);
 
   const handleDelete = async (id) => {
     try {
       await historyAPI.delete(id);
       setHistory(prev => prev.filter(h => h.id !== id));
+      setTotal(prev => Math.max(prev - 1, 0));
       notifyHistoryChange();
     } catch (err) {
       setError(err.message);
@@ -68,7 +95,7 @@ export default function HistoryTab() {
   if (error) return (
     <div className="p-4 text-center">
       <p className="text-xs text-red-400 mb-2">{error}</p>
-      <button onClick={fetchHistory} className="text-xs text-white/40 hover:text-white/80">重试</button>
+      <button onClick={() => fetchHistory({ force: true })} className="text-xs text-white/40 hover:text-white/80">重试</button>
     </div>
   );
 
@@ -83,7 +110,7 @@ export default function HistoryTab() {
           onCancel={() => setDeleteTarget(null)}
         />
       )}
-      {history.slice(0, showCount).map(item => {
+      {history.map(item => {
         const config = TYPE_CONFIG[item.type] || { label: item.type };
         const resultUrl = getMediaUrl(item.results?.[0]?.url || '');
         const ext = OUTPUT_EXT[item.type] || 'png';
@@ -93,9 +120,9 @@ export default function HistoryTab() {
             <div className="flex items-start gap-2.5">
               <div className="w-12 h-12 rounded-lg overflow-hidden bg-white/[0.03] border border-border flex-shrink-0 flex items-center justify-center">
                 {(item.type === 'image' || item.type === 'image-edit' || item.type === 'text2image') && resultUrl ? (
-                  <img src={resultUrl} alt="" className="w-full h-full object-cover" />
+                  <img src={resultUrl} alt="" className="w-full h-full object-cover" loading="lazy" decoding="async" />
                 ) : (item.type === 'video' || item.type === 'interpolation' || item.type === 'image2video' || item.type === 'a2v' || item.type === 'text2video') && resultUrl ? (
-                  <video src={resultUrl} className="w-full h-full object-cover" preload="metadata" muted />
+                  <VideoThumbnail src={resultUrl} className="w-full h-full" iconSize={10} iconClassName="w-6 h-6" />
                 ) : item.type === 'audio' || item.type === 'clone' || item.type === 'speech' ? (
                   <span className="text-sm opacity-40">🎵</span>
                 ) : (
@@ -120,9 +147,13 @@ export default function HistoryTab() {
           </div>
         );
       })}
-      {history.length > showCount && (
-        <button onClick={() => setShowCount(c => c + 50)} className="w-full py-2 text-xs text-white/30 hover:text-white/60 transition-colors rounded-lg hover:bg-white/[0.02]">
-          加载更多 ({history.length - showCount} 项剩余)
+      {hasMore && (
+        <button
+          onClick={() => fetchHistory({ cursor: nextCursor, append: true })}
+          disabled={loadingMore}
+          className="w-full py-2 text-xs text-white/30 hover:text-white/60 transition-colors rounded-lg hover:bg-white/[0.02] disabled:opacity-40"
+        >
+          {loadingMore ? '加载中...' : `加载更多 (${Math.max(total - history.length, 0)} 项剩余)`}
         </button>
       )}
     </div>

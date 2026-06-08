@@ -1,4 +1,5 @@
-import { useRef, useState, useEffect } from 'react';
+import { useRef, useState } from 'react';
+import useObjectUrl from '../../hooks/useObjectUrl';
 import { showToast } from './Toast';
 
 const MAX_FILE_SIZE = 20 * 1024 * 1024;
@@ -6,26 +7,16 @@ const MAX_FILE_SIZE = 20 * 1024 * 1024;
 export default function AudioPicker({ file, onUpload, onClear, label = '点击或拖拽上传音频' }) {
   const inputRef = useRef(null);
   const [dragOver, setDragOver] = useState(false);
-  const [audioUrl, setAudioUrl] = useState(null);
-  const [fileName, setFileName] = useState('');
+  const audioUrl = useObjectUrl(file);
+  const fileName = file?.name || '';
 
-  useEffect(() => {
-    if (file) {
-      const url = URL.createObjectURL(file);
-      setAudioUrl(url);
-      setFileName(file.name);
-      return () => URL.revokeObjectURL(url);
+  const handleFile = (nextFile) => {
+    if (!nextFile) return;
+    if (nextFile.size > MAX_FILE_SIZE) {
+      showToast('文件大小不能超过 20MB', 'error');
+      return;
     }
-  }, [file]);
-
-  const handleFile = (f) => {
-    if (!f) return;
-    if (f.size > MAX_FILE_SIZE) { showToast('文件大小不能超过 20MB', 'error'); return; }
-    if (audioUrl) URL.revokeObjectURL(audioUrl);
-    const url = URL.createObjectURL(f);
-    setAudioUrl(url);
-    setFileName(f.name);
-    onUpload?.(f);
+    onUpload?.(nextFile);
   };
 
   const handleChange = (e) => {
@@ -35,9 +26,6 @@ export default function AudioPicker({ file, onUpload, onClear, label = '点击�
 
   const handleClear = (e) => {
     e.stopPropagation();
-    if (audioUrl) URL.revokeObjectURL(audioUrl);
-    setAudioUrl(null);
-    setFileName('');
     onClear?.();
   };
 
@@ -46,11 +34,9 @@ export default function AudioPicker({ file, onUpload, onClear, label = '点击�
       <div className="bg-white/[0.02] border border-primary/40 rounded-lg p-2">
         <div className="flex items-center justify-between mb-1.5">
           <span className="text-xs text-white/60 truncate flex-1">{fileName}</span>
-          <div className="flex gap-2">
-            <button onClick={handleClear} className="text-[10px] text-red-400/60 hover:text-red-400 transition-colors">删除</button>
-          </div>
+          <button onClick={handleClear} className="text-[10px] text-red-400/60 hover:text-red-400 transition-colors">删除</button>
         </div>
-        <audio src={audioUrl} controls className="w-full h-8" />
+        <audio src={audioUrl} controls preload="metadata" className="w-full h-8" />
         <input ref={inputRef} type="file" accept="audio/*" className="hidden" onChange={handleChange} />
       </div>
     );

@@ -268,8 +268,8 @@ export default function InterpolationStudio() {
 
           <AudioPicker file={audio} onUpload={setAudio} onClear={() => setAudio(null)} label="上传音频（可选）" />
           <AudioInsertPosition value={audioPosition} onChange={setAudioPosition} duration={duration} />
-          {currentModel.supportsNegativePrompt && <NegativePromptInput value={negativePrompt} onChange={setNegativePrompt} placeholder="负向提示词（可选）" />}
-          <PromptInput value={prompt} onChange={setPrompt} placeholder="描述关键帧之间的过渡效果和视频内容。上传关键帧图片（可选音频）后点击「生成插帧生音视频」" />
+          {currentModel.supportsNegativePrompt && <NegativePromptInput value={negativePrompt} onChange={setNegativePrompt} placeholder="负向提示词（可选）" helpText="填写不希望过渡视频中出现的内容或缺陷，例如闪烁、抖动、畸形、低清晰度、文字、水印；可留空。" />}
+          <PromptInput value={prompt} onChange={setPrompt} label="过渡效果描述" helpText="描述关键帧之间如何变化，例如镜头运动、主体动作、季节/光影/风格过渡，以及希望保持的画面特征。" placeholder="描述关键帧之间的过渡效果和视频内容。上传关键帧图片（可选音频）后点击「生成插帧生音视频」" />
         </div>
 
         <div className="flex-shrink-0 flex items-center gap-2 p-4 pt-0">
@@ -290,12 +290,13 @@ export default function InterpolationStudio() {
   );
 }
 
-function ParameterInput({ label, value, onChange }) {
+function ParameterInput({ label, helpText, value, onChange }) {
   return (
     <div>
       <div className="inline-flex max-w-full rounded-md bg-primary/15 px-2 py-1 text-[11px] font-semibold leading-5 text-primary">
         {label}
       </div>
+      {helpText && <p className="mt-1 text-[10px] leading-4 text-white/30">{helpText}</p>}
       <input
         value={value}
         onChange={(event) => onChange(event.target.value)}
@@ -348,12 +349,14 @@ function FrameParameterPanel({
       </div>
 
       <ParameterInput
-        label="关键帧时间点（百分比，用逗号分隔，0-100），与输入的关键帧图片数量一致"
+        label="关键帧时间点"
+        helpText="百分比位置，用逗号分隔，取值 0-100；数量必须和关键帧图片一致。例如 2 张图填写 0,100，3 张图可填写 0,50,100。"
         value={positionText}
         onChange={onPositionChange}
       />
       <ParameterInput
-        label="控制关键帧图片的保持程度，1.0 为完全保持，0.0 为完全忽略（小数，用逗号分隔，0.0-1.0），与输入的关键帧图片数量一致"
+        label="关键帧保持强度"
+        helpText="控制每张关键帧被保留的程度，取值 0.0-1.0，数量必须和关键帧图片一致；1.0 为完全保持，0.0 为几乎忽略。"
         value={strengthText}
         onChange={onStrengthChange}
       />

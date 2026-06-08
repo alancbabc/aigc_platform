@@ -23,7 +23,7 @@ export default function ImageStudio({ mode = 'text2image' }) {
   const [steps,setSteps]=useState(imageModels[0].defaultInferenceSteps);const [gn,setGn]=useState(1);
   const [gc,setGc]=useState(0);const [err,setErr]=useState(null);
   const cm=getImageModelById(sid);const can=ie?(prompt.trim()&&refImgs.length>0):!!prompt.trim();
-  useEffect(()=>{if(optimizeOpen)setOptimizePanel({prompt,type:'image',onApply:setPrompt});},[optimizeOpen,prompt,setOptimizePanel]);
+  useEffect(()=>{if(optimizeOpen)setOptimizePanel({prompt,type:ie?'image-edit':'text2image',onApply:setPrompt});},[optimizeOpen,prompt,setOptimizePanel,ie]);
   const tcRef=useRef(0),ttRef=useRef(0);
   const bt=()=>{tcRef.current++;clearTimeout(ttRef.current);ttRef.current=setTimeout(()=>{showToast(`生成完成 (${tcRef.current} 个)`,'success');tcRef.current=0;},500);};
 
@@ -42,8 +42,8 @@ export default function ImageStudio({ mode = 'text2image' }) {
             <ResolutionSelector initialValue={size} resolutionOptions={cm.resolutionOptions} aspectRatioOptions={cm.aspectRatioOptions} initialResolution={resolutionPreset} initialAspectRatio={aspectRatio} onSelect={(value, meta)=>{setSize(value);setResolutionPreset(meta.resolution);setAspectRatio(meta.aspectRatio);}} />
           </div>
           {ie&&<ImageUploader file={refImgs[0]} onUpload={(f)=>setRefImgs([f])} onClear={()=>setRefImgs([])} label="上传参考图片"/>}
-          {cm.supportsNegativePrompt&&<NegativePromptInput value={np} onChange={setNp} placeholder="负向提示词（可选）"/>}
-          <PromptInput value={prompt} onChange={setPrompt} placeholder={ie?'描述您希望对图片进行的修改...':'描述您想要生成的内容。选择模型和尺寸，点击「生成图片」'}/>
+          {cm.supportsNegativePrompt&&<NegativePromptInput value={np} onChange={setNp} placeholder="负向提示词（可选）" helpText="填写不希望图片中出现的内容或缺陷，例如水印、模糊、畸形、文字错误；可留空。"/>}
+          <PromptInput value={prompt} onChange={setPrompt} label={ie?'编辑指令':'画面描述'} helpText={ie?'描述要如何修改参考图，例如改变风格、主体动作、背景或局部细节。':'描述要生成的图片主体、场景、风格、构图、光线和细节。'} placeholder={ie?'描述您希望对图片进行的修改...':'描述您想要生成的内容。选择模型和尺寸，点击「生成图片」'}/>
           <div className="mt-auto flex items-center gap-2">
             <button onClick={()=>setOptimizeOpen(!optimizeOpen)} className={`px-3 py-1.5 rounded-lg text-xs border transition-all ${optimizeOpen?'bg-primary/10 text-primary border-primary/30':'bg-white/[0.03] text-white/40 border-border hover:text-white hover:bg-white/10'}`}>
               {optimizeOpen?'关闭优化':'优化 Prompt'}

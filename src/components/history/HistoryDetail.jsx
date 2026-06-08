@@ -73,17 +73,17 @@ export default function HistoryDetail({ item, onClose, onDelete }) {
 
         <div className="flex-1 overflow-auto p-6">
           {['image', 'image-edit', 'text2image'].includes(item.type) && resultUrl && (
-            <img src={resultUrl} alt="" className="w-full max-h-[55vh] object-contain rounded-xl bg-black/20" />
+            <img src={resultUrl} alt="" className="w-full max-h-[55vh] object-contain rounded-xl bg-black/20" loading="lazy" decoding="async" />
           )}
           {['video', 'interpolation', 'image2video', 'a2v', 'text2video'].includes(item.type) && resultUrl && (
-            <video src={resultUrl} controls className="w-full max-h-[55vh] rounded-xl bg-black" />
+            <video src={resultUrl} controls preload="metadata" className="w-full max-h-[55vh] rounded-xl bg-black" />
           )}
           {['audio', 'clone', 'speech'].includes(item.type) && resultUrl && (
             <div className="flex flex-col items-center gap-4 py-6">
               <div className="w-24 h-24 bg-primary/10 rounded-3xl flex items-center justify-center text-5xl">
                 🎵
               </div>
-              <audio src={resultUrl} controls className="w-full max-w-md" />
+              <audio src={resultUrl} controls preload="metadata" className="w-full max-w-md" />
             </div>
           )}
 

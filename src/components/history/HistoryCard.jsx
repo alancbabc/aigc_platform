@@ -1,4 +1,5 @@
 import { getMediaUrl } from '../../api/client';
+import VideoThumbnail from '../common/VideoThumbnail';
 
 const typeConfig = {
   image: { icon: '🖼', label: '图片' },
@@ -27,18 +28,9 @@ export default function HistoryCard({ item, onClick, onDelete }) {
       className="group relative aspect-square rounded-xl overflow-hidden border border-border bg-white/[0.01] cursor-pointer hover:border-white/20 transition-all hover:scale-[1.02]"
     >
       {isImage(item.type) ? (
-        <img src={resultUrl} alt="" className="w-full h-full object-cover" loading="lazy" />
+        <img src={resultUrl} alt="" className="w-full h-full object-cover" loading="lazy" decoding="async" />
       ) : isVideo(item.type) ? (
-        <div className="w-full h-full relative bg-black/40">
-          <video src={resultUrl} className="w-full h-full object-cover" muted />
-          <div className="absolute inset-0 flex items-center justify-center">
-            <div className="w-10 h-10 bg-white/10 backdrop-blur-sm rounded-full flex items-center justify-center">
-              <svg width="16" height="16" viewBox="0 0 24 24" fill="white">
-                <polygon points="5 3 19 12 5 21 5 3" />
-              </svg>
-            </div>
-          </div>
-        </div>
+        <VideoThumbnail src={resultUrl} className="w-full h-full" />
       ) : (
         <div className="w-full h-full bg-gradient-to-br from-primary/10 to-purple-500/10 flex items-center justify-center text-4xl">
           {config.icon}

@@ -31,7 +31,7 @@ export default function VideoStudio({ mode = 'text2video' }) {
   const [audio,setAudio]=useState(null);const [audioPos,setAudioPos]=useState(0);const [gn,setGn]=useState(1);
   const [gc,setGc]=useState(0);const [err,setErr]=useState(null);
   const cm=getVideoModelById(sid);const can=cfg.can(prompt,!!ri);
-  useEffect(()=>{if(optimizeOpen)setOptimizePanel({prompt,type:'video',onApply:setPrompt});},[optimizeOpen,prompt,setOptimizePanel]);
+  useEffect(()=>{if(optimizeOpen)setOptimizePanel({prompt,type:mode==='image2video'?'image2video':'text2video',onApply:setPrompt});},[optimizeOpen,prompt,setOptimizePanel,mode]);
   const vcRef=useRef(0),vtRef=useRef(0);
   const vbt=()=>{vcRef.current++;clearTimeout(vtRef.current);vtRef.current=setTimeout(()=>{showToast(`生成完成 (${vcRef.current} 个)`,'success');vcRef.current=0;},500);};
 
@@ -61,8 +61,8 @@ export default function VideoStudio({ mode = 'text2video' }) {
           {cfg.ni&&<ImageUploader file={ri} onUpload={setRi} onClear={()=>setRi(null)}/>}
           <AudioPicker file={audio} onUpload={setAudio} onClear={()=>setAudio(null)} label="上传音频（可选）"/>
           <AudioInsertPosition value={audioPos} onChange={setAudioPos} duration={dur}/>
-          {cm.supportsNegativePrompt&&<NegativePromptInput value={np} onChange={setNp} placeholder="负向提示词（可选）"/>}
-          <PromptInput value={prompt} onChange={setPrompt} placeholder={cfg.ni?'描述基于图片的视频动效，可选配合音频...':'描述想要的音视频内容。选择模型、质量、分辨率，可选上传音频，点击「生成音视频」'}/>
+          {cm.supportsNegativePrompt&&<NegativePromptInput value={np} onChange={setNp} placeholder="负向提示词（可选）" helpText="填写不希望视频中出现的画面、动作或缺陷，例如抖动、畸形、低清晰度、文字、水印；可留空。"/>}
+          <PromptInput value={prompt} onChange={setPrompt} label={cfg.ni?'视频动效描述':'视频内容描述'} helpText={cfg.ni?'描述参考图片如何运动、镜头如何变化，以及希望保留或强化的画面细节。':'描述视频主体、动作、镜头、场景、风格和节奏；如上传音频，可同时描述音画配合效果。'} placeholder={cfg.ni?'描述基于图片的视频动效，可选配合音频...':'描述想要的音视频内容。选择模型、质量、分辨率，可选上传音频，点击「生成音视频」'}/>
         </div>
         <div className="flex-shrink-0 flex items-center gap-2 p-4 pt-0">
           <button onClick={()=>setOptimizeOpen(!optimizeOpen)} className={`px-3 py-1.5 rounded-lg text-xs border transition-all ${optimizeOpen?'bg-primary/10 text-primary border-primary/30':'bg-white/[0.03] text-white/40 border-border hover:text-white hover:bg-white/10'}`}>

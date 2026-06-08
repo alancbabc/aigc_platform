@@ -6,6 +6,8 @@ const TaskContext = createContext(null);
 const STORAGE_KEY = 'aigc_tasks';
 const MAX_TASKS = 50;
 const MAX_AGE_MS = 24 * 60 * 60 * 1000;
+const ACTIVE_POLL_INTERVAL_MS = 3000;
+const HIDDEN_POLL_INTERVAL_MS = 15000;
 const TASK_LOST_MESSAGE = '服务端已找不到该任务状态，请稍后到历史记录查看结果';
 const TASK_CANCELLED_MESSAGE = '任务已取消';
 
@@ -41,10 +43,20 @@ export function TaskProvider({ children }) {
   const [lastTaskType, setLastTaskType] = useState(null);
   const [optimizeOpen, setOptimizeOpen] = useState(false);
   const [optimizePanel, setOptimizePanel] = useState(null);
+  const [pageVisible, setPageVisible] = useState(() => (
+    typeof document === 'undefined' ? true : !document.hidden
+  ));
 
   useEffect(() => {
     try { sessionStorage.setItem(STORAGE_KEY, JSON.stringify(tasks)); } catch {}
   }, [tasks]);
+
+  useEffect(() => {
+    if (typeof document === 'undefined') return undefined;
+    const handleVisibilityChange = () => setPageVisible(!document.hidden);
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+    return () => document.removeEventListener('visibilitychange', handleVisibilityChange);
+  }, []);
 
   useEffect(() => {
     const pollable = tasks.filter(t =>
@@ -64,50 +76,61 @@ export function TaskProvider({ children }) {
         }
       }));
       if (cancelled) return;
-      setTasks(prev => prev.map(task => {
-        const update = updates.find(u => u.id === task.id);
-        if (!update) return task;
-        if (update.data) {
-          const { status, results, error, duration } = update.data;
-          const nextStatus = status === 'cancelled' ? 'failed' : status;
-          const nextError = error || (status === 'cancelled' ? TASK_CANCELLED_MESSAGE : null);
-          const nextResults = results || task.results;
-          const nextDuration = ['done', 'failed', 'cancelled'].includes(status) ? (duration ?? task.duration) : task.duration;
-          if (
-            task.status === nextStatus &&
-            task.results === nextResults &&
-            task.error === nextError &&
-            task.duration === nextDuration
-          ) {
-            return task;
+      setTasks(prev => {
+        let changed = false;
+        const nextTasks = prev.map(task => {
+          const update = updates.find(u => u.id === task.id);
+          if (!update) return task;
+          if (update.data) {
+            const { status, results, error, duration } = update.data;
+            const nextStatus = status === 'cancelled' ? 'failed' : status;
+            const nextError = error || (status === 'cancelled' ? TASK_CANCELLED_MESSAGE : null);
+            const nextResults = results || task.results;
+            const nextDuration = ['done', 'failed', 'cancelled'].includes(status) ? (duration ?? task.duration) : task.duration;
+            if (
+              task.status === nextStatus &&
+              task.results === nextResults &&
+              task.error === nextError &&
+              task.duration === nextDuration
+            ) {
+              return task;
+            }
+            const nextTask = {
+              ...task,
+              status: nextStatus,
+              results: nextResults,
+              error: nextError,
+              duration: nextDuration,
+              updatedAt: Date.now(),
+            };
+            if (nextStatus === 'done' && task.status !== 'done') {
+              setHistoryVersion(v => v + 1);
+            }
+            changed = true;
+            return nextTask;
           }
-          return {
-            ...task,
-            status: nextStatus,
-            results: nextResults,
-            error: nextError,
-            duration: nextDuration,
-            updatedAt: Date.now(),
-          };
-        }
-        if (['generating', 'submitted', 'unknown'].includes(task.status)) {
-          if (update.lost) {
-            return { ...task, generationId: null, status: 'unknown', error: TASK_LOST_MESSAGE, updatedAt: Date.now() };
+          if (['generating', 'submitted', 'unknown'].includes(task.status)) {
+            if (update.lost) {
+              changed = true;
+              return { ...task, generationId: null, status: 'unknown', error: TASK_LOST_MESSAGE, updatedAt: Date.now() };
+            }
+            if (!update.error || task.error === update.error) return task;
+            changed = true;
+            return { ...task, status: 'unknown', error: update.error || task.error, updatedAt: Date.now() };
           }
-          if (!update.error || task.error === update.error) return task;
-          return { ...task, status: 'unknown', error: update.error || task.error, updatedAt: Date.now() };
-        }
-        return task;
-      }));
+          return task;
+        });
+        return changed ? nextTasks : prev;
+      });
     };
 
     poll();
-    const timer = setInterval(poll, 3000);
+    const timer = setInterval(poll, pageVisible ? ACTIVE_POLL_INTERVAL_MS : HIDDEN_POLL_INTERVAL_MS);
     return () => {
       cancelled = true;
       clearInterval(timer);
     };
-  }, [tasks]);
+  }, [tasks, pageVisible]);
 
   const addTask = useCallback((task) => {
     const t = {

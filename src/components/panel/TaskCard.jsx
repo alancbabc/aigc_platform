@@ -35,11 +35,11 @@ export default function TaskCard({ task }) {
     <div className={`bg-white/[0.02] border rounded-xl p-3 transition-colors ${active ? 'border-primary/20' : failed ? 'border-red-500/20' : 'border-border hover:border-white/10'}`}>
       {done && rUrl && (
         <div className="mb-2 rounded-lg overflow-hidden bg-black/20 relative group">
-          {isImg(type) && <img src={rUrl} alt="" className="w-full h-60 object-contain cursor-pointer" onClick={() => setFullscreen(true)} />}
-          {isVid(type) && <video src={rUrl} className="w-full h-60 object-contain cursor-pointer" controls onClick={() => setFullscreen(true)} />}
+          {isImg(type) && <img src={rUrl} alt="" className="w-full h-60 object-contain cursor-pointer" loading="lazy" decoding="async" onClick={() => setFullscreen(true)} />}
+          {isVid(type) && <video src={rUrl} className="w-full h-60 object-contain cursor-pointer" controls preload="metadata" onClick={() => setFullscreen(true)} />}
           {isAud(type) && (
             <div className="h-20 flex items-center justify-center">
-              <audio src={rUrl} controls className="w-full h-8" />
+              <audio src={rUrl} controls preload="metadata" className="w-full h-8" />
             </div>
           )}
           <button
@@ -92,7 +92,7 @@ export default function TaskCard({ task }) {
       )}
       {fullscreen && (
         <div className="fixed inset-0 z-50 bg-black/90 flex items-center justify-center cursor-pointer" onClick={() => setFullscreen(false)}>
-          {isImg(type) && <img src={rUrl} alt="" className="max-w-full max-h-full object-contain" />}
+          {isImg(type) && <img src={rUrl} alt="" className="max-w-full max-h-full object-contain" loading="lazy" decoding="async" />}
           {isVid(type) && <video src={rUrl} controls autoPlay className="max-w-full max-h-full" />}
         </div>
       )}

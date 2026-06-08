@@ -24,7 +24,15 @@ app.use('/outputs/:user', authMiddleware, (req, res, next) => {
   }
   next();
 });
-app.use('/outputs', express.static(path.join(config.DATA_DIR, 'outputs')));
+app.use('/outputs', express.static(path.join(config.DATA_DIR, 'outputs'), {
+  etag: true,
+  lastModified: true,
+  maxAge: '30d',
+  immutable: true,
+  setHeaders: (res) => {
+    res.setHeader('Cache-Control', 'private, max-age=2592000, immutable');
+  },
+}));
 
 app.use('/api/auth', authRouter);
 app.use('/api/generate', generateRouter);
@@ -41,8 +49,19 @@ app.use((err, _req, res, _next) => {
 });
 
 if (process.env.NODE_ENV === 'production') {
-  app.use(express.static(path.join(__dirname, '..', 'dist')));
+  app.use(express.static(path.join(__dirname, '..', 'dist'), {
+    etag: true,
+    lastModified: true,
+    setHeaders: (res, filePath) => {
+      if (filePath.includes(`${path.sep}assets${path.sep}`)) {
+        res.setHeader('Cache-Control', 'public, max-age=31536000, immutable');
+      } else if (filePath.endsWith('index.html')) {
+        res.setHeader('Cache-Control', 'no-cache');
+      }
+    },
+  }));
   app.get('*', (_req, res) => {
+    res.setHeader('Cache-Control', 'no-cache');
     res.sendFile(path.join(__dirname, '..', 'dist', 'index.html'));
   });
 }

@@ -14,6 +14,23 @@ function generateId() {
   });
 }
 
+function getUserOutputDir(username) {
+  return path.resolve(config.DATA_DIR, 'outputs', username);
+}
+
+function resolveOutputPath(username, result) {
+  const outputDir = getUserOutputDir(username);
+  const candidate = result?.filePath
+    ? path.resolve(result.filePath)
+    : result?.filename
+      ? path.resolve(outputDir, result.filename)
+      : null;
+  if (!candidate) return null;
+  const relative = path.relative(outputDir, candidate);
+  if (relative.startsWith('..') || path.isAbsolute(relative)) return null;
+  return candidate;
+}
+
 export function getHistory(username) {
   const data = readJSON(getHistoryFile(username));
   return (data || []).sort(
@@ -52,11 +69,10 @@ export async function deleteHistory(username, id) {
 
   if (!found) return false;
 
-  // Delete output files AFTER record is removed (safe: record gone, files best-effort)
+  // Delete output files AFTER record is removed (safe: record gone, files best-effort).
+  // Only files inside the current user's output directory are eligible.
   for (const r of toDelete) {
-    const filePath = r.filePath || (r.filename
-      ? path.join(config.DATA_DIR, 'outputs', username, r.filename)
-      : null);
+    const filePath = resolveOutputPath(username, r);
     if (filePath) {
       try { fs.unlinkSync(filePath); } catch {}
     }
