@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { optimizeAPI } from '../../api/client';
 import { showToast } from './Toast';
 import LoadingSpinner from './LoadingSpinner';
@@ -14,6 +14,11 @@ export default function PromptPanel({ prompt, type, onApply, onClose }) {
   const [result, setResult] = useState('');
   const [applied, setApplied] = useState(false);
   const [model, setModel] = useState(MODELS[0].label);
+
+  useEffect(() => {
+    setResult('');
+    setApplied(false);
+  }, [prompt, type, onApply]);
 
   const handleOptimize = async () => {
     if (!prompt?.trim()) return;

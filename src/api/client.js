@@ -7,6 +7,15 @@ const historyCache = new Map();
 const historyInFlight = new Map();
 let historyCacheVersion = 0;
 
+class ApiError extends Error {
+  constructor(message, status, data) {
+    super(message);
+    this.name = 'ApiError';
+    this.status = status;
+    this.data = data;
+  }
+}
+
 export function getMediaUrl(url) {
   if (!url) return '';
   try {
@@ -45,7 +54,10 @@ export async function apiPost(endpoint, body) {
 
 async function apiRequest(endpoint, options = {}, retries = 2) {
   let lastError;
-  for (let attempt = 0; attempt <= retries; attempt++) {
+  const method = (options.method || 'GET').toUpperCase();
+  const shouldRetry = options.retry ?? (method === 'GET');
+  const maxRetries = shouldRetry ? retries : 0;
+  for (let attempt = 0; attempt <= maxRetries; attempt++) {
     if (attempt > 0) {
       await new Promise(r => setTimeout(r, 1000 * attempt));
     }
@@ -55,7 +67,7 @@ async function apiRequest(endpoint, options = {}, retries = 2) {
       lastError = err;
       if (err.name === 'AbortError') throw err;
       if (err.message === 'Session expired, please login again') throw err;
-      if (err.message?.startsWith?.('Server returned 4')) throw err;
+      if (err.status >= 400 && err.status < 500) throw err;
     }
   }
   throw lastError;
@@ -96,7 +108,7 @@ async function _doRequest(endpoint, options = {}) {
   }
 
   if (!res.ok) {
-    throw new Error(data?.error || data?.detail || `Request failed (${res.status})`);
+    throw new ApiError(data?.error || data?.detail || `Request failed (${res.status})`, res.status, data);
   }
   return data;
 }
@@ -204,28 +216,32 @@ async function getHistory(params = {}, options = {}) {
 
 export function createGenerationAPI() {
   return {
-    image: (params) =>
+    image: (params, options = {}) =>
       apiRequest('/generate/image', {
         method: 'POST',
         body: JSON.stringify(params),
+        signal: options.signal,
       }),
 
-    video: (params) =>
+    video: (params, options = {}) =>
       apiRequest('/generate/video', {
         method: 'POST',
         body: JSON.stringify(params),
+        signal: options.signal,
       }),
 
-    audio: (params) =>
+    audio: (params, options = {}) =>
       apiRequest('/generate/audio', {
         method: 'POST',
         body: JSON.stringify(params),
+        signal: options.signal,
       }),
 
-    interpolation: (params) =>
+    interpolation: (params, options = {}) =>
       apiRequest('/generate/interpolation', {
         method: 'POST',
         body: JSON.stringify(params),
+        signal: options.signal,
       }),
   };
 }

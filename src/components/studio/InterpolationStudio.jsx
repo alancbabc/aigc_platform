@@ -19,12 +19,8 @@ function taskId() { return `c_${Date.now()}_${++seq}`; }
 
 const MAX_FRAMES = 10;
 const DEFAULT_FRAME_STRENGTH = 0.85;
-
-function clamp(value, min, max) {
-  const n = Number(value);
-  if (!Number.isFinite(n)) return min;
-  return Math.min(max, Math.max(min, n));
-}
+const NUMBER_PATTERN = /^-?(?:\d+\.?\d*|\.\d+)$/;
+const FRAME_RATE = 24;
 
 function defaultPosition(index, total) {
   if (total <= 1) return 0;
@@ -37,15 +33,15 @@ function defaultsForCount(count, type) {
   ));
 }
 
-function parseList(value, count, { min, max, type }) {
-  const fallback = defaultsForCount(count, type);
-  const parsed = value
-    .split(',')
-    .map(item => item.trim())
-    .filter(Boolean)
-    .map(item => clamp(item, min, max));
+function calculateNumFrames(duration) {
+  const seconds = Number(duration) || 5;
+  return Math.floor(((seconds * FRAME_RATE + 7) / 8)) * 8 + 1;
+}
 
-  return fallback.map((fallbackValue, index) => parsed[index] ?? fallbackValue);
+function positionToFrameIndex(percent, numFrames) {
+  const relative = percent / 100;
+  const normalized = relative === 1 ? relative - 10e-16 : relative;
+  return Math.round((numFrames - 1) * normalized);
 }
 
 function formatList(values, type) {
@@ -54,8 +50,54 @@ function formatList(values, type) {
   )).join(', ');
 }
 
-export default function InterpolationStudio() {
-  const { addTask, updateTask, optimizeOpen, setOptimizeOpen, setOptimizePanel } = useTasks();
+function validateParameterList(value, count, { min, max, type, label, frameCount = null, strictlyIncreasing = false }) {
+  if (count === 0) return { values: [], error: '' };
+  const rawItems = value.split(',').map(item => item.trim());
+  if (rawItems.length === 1 && rawItems[0] === '') {
+    return { values: [], error: `${label}不能为空` };
+  }
+  if (rawItems.length !== count) {
+    return { values: [], error: `${label}数量应为 ${count} 个，当前为 ${rawItems.length} 个` };
+  }
+
+  const values = [];
+  for (let index = 0; index < rawItems.length; index++) {
+    const item = rawItems[index];
+    if (!item) {
+      return { values: [], error: `第 ${index + 1} 个${label}不能为空` };
+    }
+    if (!NUMBER_PATTERN.test(item)) {
+      return { values: [], error: `第 ${index + 1} 个${label}不是有效数字` };
+    }
+    const valueNumber = Number(item);
+    if (!Number.isFinite(valueNumber)) {
+      return { values: [], error: `第 ${index + 1} 个${label}不是有效数字` };
+    }
+    if (valueNumber < min || valueNumber > max) {
+      return { values: [], error: `第 ${index + 1} 个${label}必须在 ${min}-${max} 之间` };
+    }
+    values.push(valueNumber);
+  }
+
+  if (strictlyIncreasing) {
+    const comparableValues = type === 'position' && frameCount
+      ? values.map(item => positionToFrameIndex(item, frameCount))
+      : values;
+    for (let index = 1; index < comparableValues.length; index++) {
+      if (comparableValues[index] <= comparableValues[index - 1]) {
+        return { values: [], error: `${label}必须严格递增` };
+      }
+    }
+  }
+
+  return {
+    values: type === 'strength' ? values.map(item => Number(item.toFixed(3))) : values,
+    error: '',
+  };
+}
+
+export default function InterpolationStudio({ active = true }) {
+  const { addTask, updateTask, optimizeOpen, setOptimizeOpen, setOptimizePanel, registerTaskAbort, unregisterTaskAbort } = useTasks();
   const loc = useLocation();
   const fileInputRef = useRef(null);
   const framesRef = useRef([]);
@@ -81,15 +123,31 @@ export default function InterpolationStudio() {
   const [dragOver, setDragOver] = useState(false);
 
   const currentModel = getInterpolationModelById(sid);
-  const canGenerate = prompt.trim() && frames.length > 0;
+  const numFrames = calculateNumFrames(duration);
+  const positionValidation = validateParameterList(positionText, frames.length, {
+    min: 0,
+    max: 100,
+    type: 'position',
+    label: '关键帧时间点',
+    frameCount: numFrames,
+    strictlyIncreasing: true,
+  });
+  const strengthValidation = validateParameterList(strengthText, frames.length, {
+    min: 0,
+    max: 1,
+    type: 'strength',
+    label: '关键帧保持强度',
+  });
+  const parameterError = frames.length > 0 ? (positionValidation.error || strengthValidation.error) : '';
+  const canGenerate = Boolean(prompt.trim() && frames.length > 0 && !parameterError);
 
   useEffect(() => {
     if (loc.state?.reusePrompt) setPrompt(loc.state.reusePrompt);
   }, [loc.key, loc.state?.reusePrompt]);
 
   useEffect(() => {
-    if (optimizeOpen) setOptimizePanel({ prompt, type: 'interpolation', onApply: setPrompt });
-  }, [optimizeOpen, prompt, setOptimizePanel]);
+    if (active && optimizeOpen) setOptimizePanel({ prompt, type: 'interpolation', source: 'interpolation', onApply: setPrompt });
+  }, [active, optimizeOpen, prompt, setOptimizePanel]);
 
   useEffect(() => {
     framesRef.current = frames;
@@ -156,15 +214,20 @@ export default function InterpolationStudio() {
     });
   };
 
-  const parsedPositions = parseList(positionText, frames.length, { min: 0, max: 100, type: 'position' }).map(Math.round);
-  const parsedStrengths = parseList(strengthText, frames.length, { min: 0, max: 1, type: 'strength' });
-
   const generate = useCallback(async (submitPrompt, submitNegative) => {
     const p = submitPrompt || prompt;
     const n = submitNegative !== undefined ? submitNegative : negativePrompt;
     if (!p.trim() || frames.length === 0) return;
+    if (parameterError) {
+      setError(parameterError);
+      showToast(parameterError, 'error');
+      setTimeout(() => setError(null), 10000);
+      return;
+    }
 
     const id = taskId();
+    const controller = new AbortController();
+    registerTaskAbort(id, controller);
     addTask({
       id,
       generationId: null,
@@ -187,8 +250,8 @@ export default function InterpolationStudio() {
         mode: 'interpolation',
         prompt: p.trim(),
         frames: framePayload,
-        frame_positions: parsedPositions,
-        frame_strengths: parsedStrengths,
+        frame_positions: positionValidation.values,
+        frame_strengths: strengthValidation.values,
         negative_prompt: n.trim() || undefined,
         seed: seed || undefined,
         duration,
@@ -198,6 +261,8 @@ export default function InterpolationStudio() {
         audio_base64: audioPayload,
         audio_insert_position: audio ? audioPosition : 0,
         gen_num: generationCount,
+      }, {
+        signal: controller.signal,
       });
 
       updateTask(id, { generationId: data.generationId || id, status: 'done', results: data.results, duration: data.duration });
@@ -211,14 +276,21 @@ export default function InterpolationStudio() {
         setTimeout(() => setError(null), 10000);
       }
     } catch (err) {
-      updateTask(id, { status: 'failed', error: err.message });
-      setError(err.message);
-      showToast(`失败: ${err.message}`, 'error');
-      setTimeout(() => setError(null), 10000);
+      if (err.name === 'AbortError') {
+        setError('任务已取消');
+        showToast('任务已取消', 'info');
+        setTimeout(() => setError(null), 3000);
+      } else {
+        updateTask(id, { status: 'failed', error: err.message });
+        setError(err.message);
+        showToast(`失败: ${err.message}`, 'error');
+        setTimeout(() => setError(null), 10000);
+      }
     } finally {
+      unregisterTaskAbort(id);
       setActiveCount(count => count - 1);
     }
-  }, [prompt, negativePrompt, seed, currentModel, frames, parsedPositions, parsedStrengths, duration, resolution, resolutionPreset, aspectRatio, audio, audioPosition, generationCount, addTask, updateTask]);
+  }, [prompt, negativePrompt, seed, currentModel, frames, positionValidation.values, strengthValidation.values, parameterError, duration, resolution, resolutionPreset, aspectRatio, audio, audioPosition, generationCount, addTask, updateTask, registerTaskAbort, unregisterTaskAbort]);
 
   return (
     <div className="h-full flex overflow-hidden">
@@ -260,6 +332,8 @@ export default function InterpolationStudio() {
             frames={frames}
             positionText={positionText}
             strengthText={strengthText}
+            positionError={positionValidation.error}
+            strengthError={strengthValidation.error}
             onPositionChange={setPositionText}
             onStrengthChange={setStrengthText}
             onRemoveFrame={removeFrame}
@@ -277,7 +351,7 @@ export default function InterpolationStudio() {
             {optimizeOpen ? '关闭优化' : '优化 Prompt'}
           </button>
           <SimpleDropdown title="数量" options={['1', '2', '4']} selected={String(generationCount)} onSelect={(value) => setGenerationCount(parseInt(value))} />
-          <GenerateButton onClick={() => generate()} disabled={!canGenerate} label={canGenerate ? '生成插帧生音视频' : !prompt.trim() && frames.length === 0 ? '请上传关键帧图片并输入 Prompt' : !prompt.trim() ? '请输入 Prompt' : '请上传关键帧图片'} />
+          <GenerateButton onClick={() => generate()} disabled={!canGenerate} label={canGenerate ? '生成插帧生音视频' : !prompt.trim() && frames.length === 0 ? '请上传关键帧图片并输入 Prompt' : !prompt.trim() ? '请输入 Prompt' : frames.length === 0 ? '请上传关键帧图片' : positionValidation.error ? '请修正关键帧时间点' : strengthValidation.error ? '请修正关键帧强度' : '请修正参数'} />
         </div>
 
         {error && (
@@ -290,7 +364,7 @@ export default function InterpolationStudio() {
   );
 }
 
-function ParameterInput({ label, helpText, value, onChange }) {
+function ParameterInput({ label, helpText, value, error, onChange }) {
   return (
     <div>
       <div className="inline-flex max-w-full rounded-md bg-primary/15 px-2 py-1 text-[11px] font-semibold leading-5 text-primary">
@@ -300,8 +374,9 @@ function ParameterInput({ label, helpText, value, onChange }) {
       <input
         value={value}
         onChange={(event) => onChange(event.target.value)}
-        className="mt-1 w-full rounded-lg border border-border bg-white/[0.03] px-3 py-2 text-sm text-white focus:outline-none focus:ring-1 focus:ring-primary/30"
+        className={`mt-1 w-full rounded-lg border bg-white/[0.03] px-3 py-2 text-sm text-white focus:outline-none focus:ring-1 ${error ? 'border-red-500/50 focus:ring-red-500/30' : 'border-border focus:ring-primary/30'}`}
       />
+      {error && <p className="mt-1 text-[10px] leading-4 text-red-400">{error}</p>}
     </div>
   );
 }
@@ -310,6 +385,8 @@ function FrameParameterPanel({
   frames,
   positionText,
   strengthText,
+  positionError,
+  strengthError,
   onPositionChange,
   onStrengthChange,
   onRemoveFrame,
@@ -352,12 +429,14 @@ function FrameParameterPanel({
         label="关键帧时间点"
         helpText="百分比位置，用逗号分隔，取值 0-100；数量必须和关键帧图片一致。例如 2 张图填写 0,100，3 张图可填写 0,50,100。"
         value={positionText}
+        error={positionError}
         onChange={onPositionChange}
       />
       <ParameterInput
         label="关键帧保持强度"
         helpText="控制每张关键帧被保留的程度，取值 0.0-1.0，数量必须和关键帧图片一致；1.0 为完全保持，0.0 为几乎忽略。"
         value={strengthText}
+        error={strengthError}
         onChange={onStrengthChange}
       />
     </div>

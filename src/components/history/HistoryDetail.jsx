@@ -33,9 +33,29 @@ function formatParamValue(key, value) {
 }
 
 import { getMediaUrl } from '../../api/client';
+import { downloadResult } from '../../utils/download';
+
+const OUTPUT_EXT = {
+  image: 'png',
+  'image-edit': 'png',
+  text2image: 'png',
+  video: 'mp4',
+  image2video: 'mp4',
+  text2video: 'mp4',
+  a2v: 'mp4',
+  interpolation: 'mp4',
+  audio: 'wav',
+  clone: 'wav',
+  speech: 'wav',
+};
+
+const isImage = (type) => ['image', 'image-edit', 'text2image'].includes(type);
+const isVideo = (type) => ['video', 'interpolation', 'image2video', 'a2v', 'text2video'].includes(type);
+const isAudio = (type) => ['audio', 'clone', 'speech'].includes(type);
 
 export default function HistoryDetail({ item, onClose, onDelete }) {
-  const resultUrl = getMediaUrl(item.results?.[0]?.url || '');
+  const results = Array.isArray(item.results) ? item.results : [];
+  const ext = OUTPUT_EXT[item.type] || 'dat';
 
   return (
     <div
@@ -72,18 +92,42 @@ export default function HistoryDetail({ item, onClose, onDelete }) {
         </div>
 
         <div className="flex-1 overflow-auto p-6">
-          {['image', 'image-edit', 'text2image'].includes(item.type) && resultUrl && (
-            <img src={resultUrl} alt="" className="w-full max-h-[55vh] object-contain rounded-xl bg-black/20" loading="lazy" decoding="async" />
-          )}
-          {['video', 'interpolation', 'image2video', 'a2v', 'text2video'].includes(item.type) && resultUrl && (
-            <video src={resultUrl} controls preload="metadata" className="w-full max-h-[55vh] rounded-xl bg-black" />
-          )}
-          {['audio', 'clone', 'speech'].includes(item.type) && resultUrl && (
-            <div className="flex flex-col items-center gap-4 py-6">
-              <div className="w-24 h-24 bg-primary/10 rounded-3xl flex items-center justify-center text-5xl">
-                🎵
-              </div>
-              <audio src={resultUrl} controls preload="metadata" className="w-full max-w-md" />
+          {results.length > 0 && (
+            <div className={results.length > 1 ? 'grid grid-cols-1 md:grid-cols-2 gap-4' : ''}>
+              {results.map((result, index) => {
+                const resultUrl = getMediaUrl(result.url || '');
+                if (!resultUrl) return null;
+                return (
+                  <div key={`${result.filename || result.url || index}`} className="relative rounded-xl border border-border bg-white/[0.02] overflow-hidden">
+                    {results.length > 1 && (
+                      <div className="absolute top-2 left-2 z-10 px-2 py-0.5 rounded-md bg-black/70 text-[10px] text-white/70">
+                        结果 {index + 1}
+                      </div>
+                    )}
+                    <button
+                      type="button"
+                      onClick={() => downloadResult(result.url, result.filename || `generated_${index + 1}.${ext}`)}
+                      className="absolute top-2 right-2 z-10 px-2 py-0.5 rounded-md bg-black/70 text-[10px] text-white/70 hover:text-white"
+                    >
+                      下载
+                    </button>
+                    {isImage(item.type) && (
+                      <img src={resultUrl} alt="" className="w-full max-h-[55vh] object-contain bg-black/20" loading="lazy" decoding="async" />
+                    )}
+                    {isVideo(item.type) && (
+                      <video src={resultUrl} controls preload="metadata" className="w-full max-h-[55vh] bg-black" />
+                    )}
+                    {isAudio(item.type) && (
+                      <div className="flex flex-col items-center gap-4 py-8 px-4">
+                        <div className="w-20 h-20 bg-primary/10 rounded-2xl flex items-center justify-center text-4xl">
+                          🎵
+                        </div>
+                        <audio src={resultUrl} controls preload="metadata" className="w-full max-w-md" />
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
             </div>
           )}
 

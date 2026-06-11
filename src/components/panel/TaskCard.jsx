@@ -27,7 +27,8 @@ export default function TaskCard({ task }) {
   const done = status === 'done';
   const failed = status === 'failed';
   const active = !done && !failed;
-  const cancellable = ['generating', 'submitted'].includes(status) && task.generationId;
+  const cancelTarget = task.generationId || task.id;
+  const cancellable = ['generating', 'submitted'].includes(status) && cancelTarget;
   const r = results?.[0];
   const rUrl = r ? getMediaUrl(r.url) : null;
 
@@ -57,7 +58,7 @@ export default function TaskCard({ task }) {
             <span className="text-[10px] text-primary animate-pulse">生成中...</span>
           </div>
           {cancellable && (
-            <button onClick={() => cancelTask(task.generationId)} className="text-[10px] text-white/30 hover:text-red-400 transition-colors">
+            <button onClick={() => cancelTask(cancelTarget)} className="text-[10px] text-white/30 hover:text-red-400 transition-colors">
               取消
             </button>
           )}

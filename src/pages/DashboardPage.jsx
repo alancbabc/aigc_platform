@@ -14,25 +14,25 @@ export default function DashboardPage({ type }) {
   return (
     <div className="h-full">
       <Wrap show={type === 'image'}>
-        <ImageStudio key="text2image" mode="text2image" />
+        <ImageStudio key="text2image" mode="text2image" active={type === 'image'} />
       </Wrap>
       <Wrap show={type === 'image-edit'}>
-        <ImageStudio key="image2image" mode="image2image" />
+        <ImageStudio key="image2image" mode="image2image" active={type === 'image-edit'} />
       </Wrap>
       <Wrap show={type === 'video'}>
-        <VideoStudio key="text2video" mode="text2video" />
+        <VideoStudio key="text2video" mode="text2video" active={type === 'video'} />
       </Wrap>
       <Wrap show={type === 'image2video'}>
-        <VideoStudio key="image2video" mode="image2video" />
+        <VideoStudio key="image2video" mode="image2video" active={type === 'image2video'} />
       </Wrap>
       <Wrap show={type === 'audio'}>
-        <AudioStudio key="speech" mode="speech" />
+        <AudioStudio key="speech" mode="speech" active={type === 'audio'} />
       </Wrap>
       <Wrap show={type === 'clone'}>
-        <AudioStudio key="clone" mode="clone" />
+        <AudioStudio key="clone" mode="clone" active={type === 'clone'} />
       </Wrap>
       <Wrap show={type === 'interpolation'}>
-        <InterpolationStudio key="interpolation" />
+        <InterpolationStudio key="interpolation" active={type === 'interpolation'} />
       </Wrap>
       <Wrap show={type === 'history'}>
         <HistoryGrid key="history" />

@@ -1,4 +1,4 @@
-import { createContext, useContext, useState, useCallback, useEffect } from 'react';
+import { createContext, useContext, useState, useCallback, useEffect, useRef } from 'react';
 import { generationTaskAPI } from '../api/client';
 
 const TaskContext = createContext(null);
@@ -39,6 +39,7 @@ function loadTasks() {
 
 export function TaskProvider({ children }) {
   const [tasks, setTasks] = useState(loadTasks);
+  const abortControllersRef = useRef(new Map());
   const [historyVersion, setHistoryVersion] = useState(0);
   const [lastTaskType, setLastTaskType] = useState(null);
   const [optimizeOpen, setOptimizeOpen] = useState(false);
@@ -156,12 +157,31 @@ export function TaskProvider({ children }) {
     }));
   }, []);
 
+  const registerTaskAbort = useCallback((taskId, controller) => {
+    if (taskId && controller) abortControllersRef.current.set(taskId, controller);
+  }, []);
+
+  const unregisterTaskAbort = useCallback((taskId) => {
+    if (taskId) abortControllersRef.current.delete(taskId);
+  }, []);
+
   const removeTask = useCallback((generationId) => {
     setTasks(prev => prev.filter(t => t.id !== generationId && t.generationId !== generationId));
   }, []);
 
   const cancelTask = useCallback(async (generationId) => {
     if (!generationId) return;
+    const localController = abortControllersRef.current.get(generationId);
+    if (localController) {
+      localController.abort();
+      abortControllersRef.current.delete(generationId);
+      setTasks(prev => prev.map(t =>
+        (t.id === generationId || t.generationId === generationId)
+          ? { ...t, status: 'failed', error: TASK_CANCELLED_MESSAGE, updatedAt: Date.now() }
+          : t
+      ));
+      return;
+    }
     try {
       await generationTaskAPI.cancel(generationId);
     } catch (err) {
@@ -190,7 +210,7 @@ export function TaskProvider({ children }) {
   return (
     <TaskContext.Provider value={{
       tasks, addTask, updateTask, removeTask, clearDone,
-      cancelTask,
+      cancelTask, registerTaskAbort, unregisterTaskAbort,
       historyVersion, notifyHistoryChange,
       lastTaskType, setLastTaskType,
       optimizeOpen, setOptimizeOpen,

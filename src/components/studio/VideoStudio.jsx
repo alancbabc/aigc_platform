@@ -21,8 +21,8 @@ const CFG = {
 };
 let _vs=0;function _vid(){return `c_${Date.now()}_${++_vs}`;}
 
-export default function VideoStudio({ mode = 'text2video' }) {
-  const cfg=CFG[mode]||CFG.text2video;const{addTask,updateTask,optimizeOpen,setOptimizeOpen,setOptimizePanel}=useTasks();const loc=useLocation();
+export default function VideoStudio({ mode = 'text2video', active = true }) {
+  const cfg=CFG[mode]||CFG.text2video;const{addTask,updateTask,optimizeOpen,setOptimizeOpen,setOptimizePanel,registerTaskAbort,unregisterTaskAbort}=useTasks();const loc=useLocation();
   const [sid,setSid]=useState(videoModels[0].id);const [ri,setRi]=useState(null);
   const [prompt,setPrompt]=useState('');useEffect(()=>{if(loc.state?.reusePrompt)setPrompt(loc.state.reusePrompt)},[loc.key]);
   const [np,setNp]=useState('text, subtitles, lower-third, chyron, nameplate, news broadcast, TV graphics, interview, breaking news banner, character introduction overlay, manga annotation, comic annotation, text bubble, lettering artifacts, on-screen text, kana, furigana, character card, profile card, vertical text, vertical subtitles, vertical title card');const [seed,setSeed]=useState('');
@@ -31,21 +31,21 @@ export default function VideoStudio({ mode = 'text2video' }) {
   const [audio,setAudio]=useState(null);const [audioPos,setAudioPos]=useState(0);const [gn,setGn]=useState(1);
   const [gc,setGc]=useState(0);const [err,setErr]=useState(null);
   const cm=getVideoModelById(sid);const can=cfg.can(prompt,!!ri);
-  useEffect(()=>{if(optimizeOpen)setOptimizePanel({prompt,type:mode==='image2video'?'image2video':'text2video',onApply:setPrompt});},[optimizeOpen,prompt,setOptimizePanel,mode]);
+  useEffect(()=>{if(active&&optimizeOpen)setOptimizePanel({prompt,type:mode==='image2video'?'image2video':'text2video',source:mode==='image2video'?'image2video':'video',onApply:setPrompt});},[active,optimizeOpen,prompt,setOptimizePanel,mode]);
   const vcRef=useRef(0),vtRef=useRef(0);
   const vbt=()=>{vcRef.current++;clearTimeout(vtRef.current);vtRef.current=setTimeout(()=>{showToast(`生成完成 (${vcRef.current} 个)`,'success');vcRef.current=0;},500);};
 
-  const gen=useCallback(async(submitPrompt,submitNeg)=>{const p=submitPrompt||prompt;const n=submitNeg!==undefined?submitNeg:np;if(!p.trim())return;const tid=_vid();addTask({id:tid,generationId:null,type:mode,prompt:p.trim(),model:cm.name,status:'generating',results:null,error:null});setGc(c=>c+1);setErr(null);showToast('任务已提交','info');
+  const gen=useCallback(async(submitPrompt,submitNeg)=>{const p=submitPrompt||prompt;const n=submitNeg!==undefined?submitNeg:np;if(!p.trim())return;const tid=_vid();const controller=new AbortController();registerTaskAbort(tid,controller);addTask({id:tid,generationId:null,type:mode,prompt:p.trim(),model:cm.name,status:'generating',results:null,error:null});setGc(c=>c+1);setErr(null);showToast('任务已提交','info');
     try{const ib=ri?await readFileAsBase64(ri):undefined;const ab=audio?await readFileAsBase64(audio):undefined;
-      const d=await createGenerationAPI().video({model:cm,mode,prompt:p.trim(),image_base64:ib,negative_prompt:n.trim()||undefined,seed:seed||undefined,duration:dur,resolution:res,resolution_preset:resolutionPreset,aspect_ratio:aspectRatio,quality:cfg.sq?qual:undefined,audio_base64:ab,audio_insert_position:audio?audioPos:0,gen_num:gn});
+      const d=await createGenerationAPI().video({model:cm,mode,prompt:p.trim(),image_base64:ib,negative_prompt:n.trim()||undefined,seed:seed||undefined,duration:dur,resolution:res,resolution_preset:resolutionPreset,aspect_ratio:aspectRatio,quality:cfg.sq?qual:undefined,audio_base64:ab,audio_insert_position:audio?audioPos:0,gen_num:gn},{signal:controller.signal});
       updateTask(tid,{generationId:d.generationId||tid,status:'done',results:d.results,duration:d.duration});vbt();
       if(d.translatedPrompt&&d.translatedPrompt!==p.trim()&&prompt===p.trim())setPrompt(d.translatedPrompt);
       if(d.translationStatus==='no_key')showToast('翻译功能不可用：未配置 Gitee API Key，使用原文生成','error',6000);
       else if(d.translationStatus==='failed')showToast('Prompt 翻译失败，使用原文生成','error',6000);
       if(d.errors){setErr(`部分失败: ${d.errors.join('; ')}`);setTimeout(()=>setErr(null),10000);}
-    }catch(e){updateTask(tid,{status:'failed',error:e.message});setErr(e.message);showToast(`失败: ${e.message}`,'error');setTimeout(()=>setErr(null),10000);}
-    finally{setGc(c=>c-1);}
-  },[prompt,np,seed,cm,ri,dur,res,resolutionPreset,aspectRatio,qual,audio,audioPos,gn,can,cfg.sq]);
+    }catch(e){if(e.name==='AbortError'){setErr('任务已取消');showToast('任务已取消','info');setTimeout(()=>setErr(null),3000);}else{updateTask(tid,{status:'failed',error:e.message});setErr(e.message);showToast(`失败: ${e.message}`,'error');setTimeout(()=>setErr(null),10000);}}
+    finally{unregisterTaskAbort(tid);setGc(c=>c-1);}
+  },[prompt,np,seed,cm,ri,dur,res,resolutionPreset,aspectRatio,qual,audio,audioPos,gn,can,cfg.sq,addTask,updateTask,registerTaskAbort,unregisterTaskAbort]);
 
   return (
     <div className="h-full flex overflow-hidden">

@@ -520,6 +520,9 @@ generateRouter.post('/video', async (req, res) => {
     const hasAudio = !!audio_base64;
     const audioInsertPosition = assertInt(audio_insert_position ?? 0, 0, 100, 'audio_insert_position');
     const hasImage = !!image_base64;
+    if (mode === 'image2video' && !hasImage) {
+      return res.status(400).json({ error: '图生音视频需要上传参考图片' });
+    }
     const generationType = hasImage || mode === 'image2video' ? 'image2video' : 'video';
 
     const pipelineName = hasAudio ? pipelines.audio : pipelines.high;
@@ -718,14 +721,17 @@ generateRouter.post('/interpolation', async (req, res) => {
     let positions = [];
     const parsedFramePositions = parseNumberList(
       frame_positions,
-      'Please enter valid key frame position percentages separated by commas'
+      '关键帧时间点必须是用逗号分隔的数字'
     );
     if (parsedFramePositions) {
-      const validPositions = parsedFramePositions.filter(p => p >= 0 && p <= 100);
-      if (validPositions.length !== frames.length) {
-        throw httpError(`key frame count (${frames.length}) does not match position count (${validPositions.length})`);
+      if (parsedFramePositions.length !== frames.length) {
+        throw httpError(`关键帧时间点数量必须和图片数量一致：已上传 ${frames.length} 张图片，但填写了 ${parsedFramePositions.length} 个时间点`);
       }
-      positions = validPositions.map(p => {
+      const invalidPositionIndex = parsedFramePositions.findIndex(p => p < 0 || p > 100);
+      if (invalidPositionIndex >= 0) {
+        throw httpError(`第 ${invalidPositionIndex + 1} 个关键帧时间点必须在 0-100 之间`);
+      }
+      positions = parsedFramePositions.map(p => {
         const relative = p / 100;
         const normalized = relative === 1 ? relative - 10e-16 : relative;
         return Math.round((numFrames - 1) * normalized);
@@ -741,24 +747,28 @@ generateRouter.post('/interpolation', async (req, res) => {
     }
 
     for (const pos of positions) {
-      if (pos < 0 || pos >= numFrames) throw httpError(`frame position ${pos} out of range (0-${numFrames - 1})`);
+      if (pos < 0 || pos >= numFrames) throw httpError(`关键帧时间点转换后的帧位置 ${pos} 超出范围 0-${numFrames - 1}`);
     }
     for (let i = 1; i < positions.length; i++) {
       if (positions[i] <= positions[i - 1]) {
-        throw httpError('frame_positions must be strictly increasing');
+        throw httpError('关键帧时间点必须严格递增');
       }
     }
 
     let strengths = [];
     const parsedFrameStrengths = parseNumberList(
       frame_strengths,
-      'Please enter valid key frame strengths separated by commas'
+      '关键帧保持强度必须是用逗号分隔的数字'
     );
     if (parsedFrameStrengths) {
-      strengths = parsedFrameStrengths.filter(s => s >= 0 && s <= 1);
-      if (strengths.length !== frames.length) {
-        throw httpError(`key frame count (${frames.length}) does not match strength count (${strengths.length})`);
+      if (parsedFrameStrengths.length !== frames.length) {
+        throw httpError(`关键帧保持强度数量必须和图片数量一致：已上传 ${frames.length} 张图片，但填写了 ${parsedFrameStrengths.length} 个强度`);
       }
+      const invalidStrengthIndex = parsedFrameStrengths.findIndex(s => s < 0 || s > 1);
+      if (invalidStrengthIndex >= 0) {
+        throw httpError(`第 ${invalidStrengthIndex + 1} 个关键帧保持强度必须在 0-1 之间`);
+      }
+      strengths = parsedFrameStrengths;
     } else {
       strengths = frames.map(() => DEFAULT_KEYFRAME_STRENGTH);
     }

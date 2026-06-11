@@ -126,8 +126,9 @@ export default function DashboardLayout() {
         <Outlet />
       </main>
 
-      {optimizeOpen && optimizePanel && (
+      {optimizeOpen && optimizePanel?.source === currentNav && (
         <PromptPanel
+          key={`${optimizePanel.source}:${optimizePanel.type}`}
           prompt={optimizePanel.prompt}
           type={optimizePanel.type}
           onApply={optimizePanel.onApply}
