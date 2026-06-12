@@ -1,23 +1,32 @@
 import { useEffect, useState } from 'react';
 import SimpleDropdown from './SimpleDropdown';
 
-const DEFAULT_RESOLUTIONS = ['540p', '720p', '1280p'];
-const DEFAULT_ASPECT_RATIOS = ['16:9', '9:16', '3:4', '4:3', '2:3', '3:2', '1:1'];
+const DEFAULT_RESOLUTIONS = ['540p', '720p', '1080p'];
+const DEFAULT_ASPECT_RATIOS = ['16:9', '9:16', '4:3', '3:4', '3:2', '2:3', '1:1'];
+
+function pythonRound(value) {
+  const floor = Math.floor(value);
+  const diff = value - floor;
+  if (Math.abs(diff - 0.5) < 1e-10) {
+    return floor % 2 === 0 ? floor : floor + 1;
+  }
+  return Math.round(value);
+}
 
 function calcResolution(resolution, aspectRatio) {
   const targets = {
     '540p': 720 * 540,
     '720p': 1280 * 720,
-    '1280p': 1920 * 1280,
+    '1080p': 1920 * 1080,
     '2K': 2560 * 1440,
   };
   const ratios = {
     '16:9': 16 / 9,
     '9:16': 9 / 16,
-    '3:4': 3 / 4,
     '4:3': 4 / 3,
-    '2:3': 2 / 3,
+    '3:4': 3 / 4,
     '3:2': 3 / 2,
+    '2:3': 2 / 3,
     '1:1': 1,
   };
   const targetPixels = targets[resolution];
@@ -25,7 +34,7 @@ function calcResolution(resolution, aspectRatio) {
   if (!targetPixels || !ratio) return '1280x720';
   const height = Math.sqrt(targetPixels / ratio);
   const width = height * ratio;
-  return `${Math.round(width / 64) * 64}x${Math.round(height / 64) * 64}`;
+  return `${pythonRound(width / 64) * 64}x${pythonRound(height / 64) * 64}`;
 }
 
 function parseResolution(value, resolutionOptions, aspectRatioOptions) {

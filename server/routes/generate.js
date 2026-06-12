@@ -366,7 +366,7 @@ generateRouter.post('/image', async (req, res) => {
       preset: resolution_preset,
       aspectRatio: aspect_ratio,
       allowedPresets: IMAGE_RESOLUTION_LABELS,
-      defaultPreset: '1280p',
+      defaultPreset: '1080p',
       field: 'resolution',
     });
     const imageList = images && Array.isArray(images) && images.length > 0 ? images : (image ? [image] : []);
