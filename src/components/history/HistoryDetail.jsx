@@ -16,7 +16,6 @@ const paramLabels = {
   text: '文本',
   emo_vector: '情绪向量',
   emo_text: '情绪参考文本',
-  gen_num: '生成数量',
   keyframe_count: '关键帧数',
 };
 

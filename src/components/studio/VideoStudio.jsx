@@ -1,4 +1,4 @@
-import { useState, useCallback, useEffect, useRef } from 'react';
+import { useState, useCallback, useEffect } from 'react';
 import { useLocation } from 'react-router-dom';
 import { createGenerationAPI } from '../../api/client';
 import { videoModels, getVideoModelById } from '../../data/models';
@@ -28,24 +28,21 @@ export default function VideoStudio({ mode = 'text2video', active = true }) {
   const [np,setNp]=useState('text, subtitles, lower-third, chyron, nameplate, news broadcast, TV graphics, interview, breaking news banner, character introduction overlay, manga annotation, comic annotation, text bubble, lettering artifacts, on-screen text, kana, furigana, character card, profile card, vertical text, vertical subtitles, vertical title card');const [seed,setSeed]=useState('');
   const [res,setRes]=useState(videoModels[0].defaultResolution);const [resolutionPreset,setResolutionPreset]=useState(videoModels[0].defaultResolutionPreset);const [aspectRatio,setAspectRatio]=useState(videoModels[0].defaultAspectRatio);const [dur,setDur]=useState(videoModels[0].defaultDuration);
   const [qual,setQual]=useState(videoModels[0].defaultQuality);
-  const [audio,setAudio]=useState(null);const [audioPos,setAudioPos]=useState(0);const [gn,setGn]=useState(1);
+  const [audio,setAudio]=useState(null);const [audioPos,setAudioPos]=useState(0);
   const [gc,setGc]=useState(0);const [err,setErr]=useState(null);
   const cm=getVideoModelById(sid);const can=cfg.can(prompt,!!ri);
   useEffect(()=>{if(active&&optimizeOpen)setOptimizePanel({prompt,type:mode==='image2video'?'image2video':'text2video',source:mode==='image2video'?'image2video':'video',onApply:setPrompt});},[active,optimizeOpen,prompt,setOptimizePanel,mode]);
-  const vcRef=useRef(0),vtRef=useRef(0);
-  const vbt=()=>{vcRef.current++;clearTimeout(vtRef.current);vtRef.current=setTimeout(()=>{showToast(`生成完成 (${vcRef.current} 个)`,'success');vcRef.current=0;},500);};
-
   const gen=useCallback(async(submitPrompt,submitNeg)=>{const p=submitPrompt||prompt;const n=submitNeg!==undefined?submitNeg:np;if(!p.trim())return;const tid=_vid();const controller=new AbortController();registerTaskAbort(tid,controller);addTask({id:tid,generationId:null,type:mode,prompt:p.trim(),model:cm.name,status:'generating',results:null,error:null});setGc(c=>c+1);setErr(null);showToast('任务已提交','info');
     try{const ib=ri?await readFileAsBase64(ri):undefined;const ab=audio?await readFileAsBase64(audio):undefined;
-      const d=await createGenerationAPI().video({model:cm,mode,prompt:p.trim(),image_base64:ib,negative_prompt:n.trim()||undefined,seed:seed||undefined,duration:dur,resolution:res,resolution_preset:resolutionPreset,aspect_ratio:aspectRatio,quality:cfg.sq?qual:undefined,audio_base64:ab,audio_insert_position:audio?audioPos:0,gen_num:gn},{signal:controller.signal});
-      updateTask(tid,{generationId:d.generationId||tid,status:'done',results:d.results,duration:d.duration});vbt();
+      const d=await createGenerationAPI().video({model:cm,mode,prompt:p.trim(),image_base64:ib,negative_prompt:n.trim()||undefined,seed:seed||undefined,duration:dur,resolution:res,resolution_preset:resolutionPreset,aspect_ratio:aspectRatio,quality:cfg.sq?qual:undefined,audio_base64:ab,audio_insert_position:audio?audioPos:0},{signal:controller.signal});
+      updateTask(tid,{generationId:d.generationId||tid,status:'done',results:d.results,duration:d.duration});showToast('生成完成','success');
       if(d.translatedPrompt&&d.translatedPrompt!==p.trim()&&prompt===p.trim())setPrompt(d.translatedPrompt);
       if(d.translationStatus==='no_key')showToast('翻译功能不可用：未配置 Gitee API Key，使用原文生成','error',6000);
       else if(d.translationStatus==='failed')showToast('Prompt 翻译失败，使用原文生成','error',6000);
       if(d.errors){setErr(`部分失败: ${d.errors.join('; ')}`);setTimeout(()=>setErr(null),10000);}
     }catch(e){if(e.name==='AbortError'){setErr('任务已取消');showToast('任务已取消','info');setTimeout(()=>setErr(null),3000);}else{updateTask(tid,{status:'failed',error:e.message});setErr(e.message);showToast(`失败: ${e.message}`,'error');setTimeout(()=>setErr(null),10000);}}
     finally{unregisterTaskAbort(tid);setGc(c=>c-1);}
-  },[prompt,np,seed,cm,ri,dur,res,resolutionPreset,aspectRatio,qual,audio,audioPos,gn,can,cfg.sq,addTask,updateTask,registerTaskAbort,unregisterTaskAbort]);
+  },[prompt,np,seed,cm,ri,dur,res,resolutionPreset,aspectRatio,qual,audio,audioPos,can,cfg.sq,addTask,updateTask,registerTaskAbort,unregisterTaskAbort]);
 
   return (
     <div className="h-full flex overflow-hidden">
@@ -68,7 +65,6 @@ export default function VideoStudio({ mode = 'text2video', active = true }) {
           <button onClick={()=>setOptimizeOpen(!optimizeOpen)} className={`px-3 py-1.5 rounded-lg text-xs border transition-all ${optimizeOpen?'bg-primary/10 text-primary border-primary/30':'bg-white/[0.03] text-white/40 border-border hover:text-white hover:bg-white/10'}`}>
             {optimizeOpen?'关闭优化':'优化 Prompt'}
           </button>
-          <SimpleDropdown title="数量" options={['1','2','4']} selected={String(gn)} onSelect={(v)=>setGn(parseInt(v))}/>
           <GenerateButton onClick={()=>gen()} disabled={!can} label={can?cfg.btn:cfg.bo}/>
         </div>
         {err&&<div className="px-2 py-1 bg-red-500/10 border border-red-500/20 rounded-md"><p className="text-red-400 text-[10px]">{err}</p></div>}

@@ -101,8 +101,6 @@ export default function InterpolationStudio({ active = true }) {
   const loc = useLocation();
   const fileInputRef = useRef(null);
   const framesRef = useRef([]);
-  const batchCountRef = useRef(0);
-  const batchTimerRef = useRef(0);
 
   const [sid, setSid] = useState(interpolationModels[0].id);
   const [prompt, setPrompt] = useState('');
@@ -117,7 +115,6 @@ export default function InterpolationStudio({ active = true }) {
   const [strengthText, setStrengthText] = useState('');
   const [audio, setAudio] = useState(null);
   const [audioPosition, setAudioPosition] = useState(0);
-  const [generationCount, setGenerationCount] = useState(1);
   const [activeCount, setActiveCount] = useState(0);
   const [error, setError] = useState(null);
   const [dragOver, setDragOver] = useState(false);
@@ -160,15 +157,6 @@ export default function InterpolationStudio({ active = true }) {
   const syncParameterText = (count) => {
     setPositionText(formatList(defaultsForCount(count, 'position'), 'position'));
     setStrengthText(formatList(defaultsForCount(count, 'strength'), 'strength'));
-  };
-
-  const showBatchToast = () => {
-    batchCountRef.current++;
-    clearTimeout(batchTimerRef.current);
-    batchTimerRef.current = setTimeout(() => {
-      showToast(`生成完成 (${batchCountRef.current} 个)`, 'success');
-      batchCountRef.current = 0;
-    }, 500);
   };
 
   const addFrameFiles = (files) => {
@@ -260,13 +248,12 @@ export default function InterpolationStudio({ active = true }) {
         aspect_ratio: aspectRatio,
         audio_base64: audioPayload,
         audio_insert_position: audio ? audioPosition : 0,
-        gen_num: generationCount,
       }, {
         signal: controller.signal,
       });
 
       updateTask(id, { generationId: data.generationId || id, status: 'done', results: data.results, duration: data.duration });
-      showBatchToast();
+      showToast('生成完成', 'success');
 
       if (data.translatedPrompt && data.translatedPrompt !== p.trim() && prompt === p.trim()) setPrompt(data.translatedPrompt);
       if (data.translationStatus === 'no_key') showToast('翻译功能不可用：未配置 Gitee API Key，使用原文生成', 'error', 6000);
@@ -290,7 +277,7 @@ export default function InterpolationStudio({ active = true }) {
       unregisterTaskAbort(id);
       setActiveCount(count => count - 1);
     }
-  }, [prompt, negativePrompt, seed, currentModel, frames, positionValidation.values, strengthValidation.values, parameterError, duration, resolution, resolutionPreset, aspectRatio, audio, audioPosition, generationCount, addTask, updateTask, registerTaskAbort, unregisterTaskAbort]);
+  }, [prompt, negativePrompt, seed, currentModel, frames, positionValidation.values, strengthValidation.values, parameterError, duration, resolution, resolutionPreset, aspectRatio, audio, audioPosition, addTask, updateTask, registerTaskAbort, unregisterTaskAbort]);
 
   return (
     <div className="h-full flex overflow-hidden">
@@ -350,7 +337,6 @@ export default function InterpolationStudio({ active = true }) {
           <button onClick={() => setOptimizeOpen(!optimizeOpen)} className={`px-3 py-1.5 rounded-lg text-xs border transition-all ${optimizeOpen ? 'bg-primary/10 text-primary border-primary/30' : 'bg-white/[0.03] text-white/40 border-border hover:text-white hover:bg-white/10'}`}>
             {optimizeOpen ? '关闭优化' : '优化 Prompt'}
           </button>
-          <SimpleDropdown title="数量" options={['1', '2', '4']} selected={String(generationCount)} onSelect={(value) => setGenerationCount(parseInt(value))} />
           <GenerateButton onClick={() => generate()} disabled={!canGenerate} label={canGenerate ? '生成插帧生音视频' : !prompt.trim() && frames.length === 0 ? '请上传关键帧图片并输入 Prompt' : !prompt.trim() ? '请输入 Prompt' : frames.length === 0 ? '请上传关键帧图片' : positionValidation.error ? '请修正关键帧时间点' : strengthValidation.error ? '请修正关键帧强度' : '请修正参数'} />
         </div>
 

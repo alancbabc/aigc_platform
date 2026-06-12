@@ -1,4 +1,4 @@
-import { useState, useCallback, useEffect, useRef } from 'react';
+import { useState, useCallback, useEffect } from 'react';
 import { useLocation } from 'react-router-dom';
 import { createGenerationAPI } from '../../api/client';
 import { audioModels, getAudioModelById } from '../../data/models';
@@ -21,21 +21,17 @@ export default function AudioStudio({ mode = 'speech', active = true }) {
   const [instr,setInstr]=useState('');const [vd,setVd]=useState(false);
   const [ra,setRa]=useState(null);const [ev,setEv]=useState([0,0,0,0,0,0,0,0]);
   const [et,setEt]=useState('');const [emoMode,setEmoMode]=useState('random');const [ea,setEa]=useState(null);
-  const [gn,setGn]=useState(1);
   const [gc,setGc]=useState(0);const [err,setErr]=useState(null);
   const can=ic?(!!inputs.trim()&&!!ra):!!inputs.trim();
   useEffect(()=>{if(active&&optimizeOpen)setOptimizePanel({prompt:inputs,type:'audio',source:ic?'clone':'audio',onApply:setInputs});},[active,optimizeOpen,inputs,setOptimizePanel,ic]);
-  const acRef=useRef(0),atRef=useRef(0);
-  const abt=()=>{acRef.current++;clearTimeout(atRef.current);atRef.current=setTimeout(()=>{showToast(`生成完成 (${acRef.current} 个)`,'success');acRef.current=0;},500);};
-
   const gen=useCallback(async(sp)=>{const p=sp||inputs;const tts=getAudioModelById('Qwen3-TTS'),idx=getAudioModelById('IndexTTS-2');if(!(ic?(!!p.trim()&&!!ra):!!p.trim()))return;const tid=_aid();const controller=new AbortController();registerTaskAbort(tid,controller);addTask({id:tid,generationId:null,type:mode,prompt:p.trim(),model:ic?idx.name:tts.name,status:'generating',results:null,error:null});setGc(c=>c+1);setErr(null);showToast('任务已提交','info');
     try{const params={model:ic?idx:tts,mode:ic?'clone':'audio',inputs:p.trim()};
       if(ic){if(ra)params.ref_audio_base64=await readFileAsBase64(ra);if(emoMode==='random'){params.use_random=true;}else if(emoMode==='vector'){params.emo_vector=ev;}else if(emoMode==='text'){if(et.trim())params.emo_text=et.trim();}else if(emoMode==='audio'){if(ea)params.emo_audio_base64=await readFileAsBase64(ea);}}
       else{params.language=lang;if(vd){params.pipeline='qwen_tts_voicedesign';if(instr.trim())params.instruct=instr.trim();}else{params.speaker=speaker;if(instr.trim())params.instruct=instr.trim();}}
-      params.gen_num=gn;const d=await createGenerationAPI().audio(params,{signal:controller.signal});
-      updateTask(tid,{generationId:d.generationId||tid,status:'done',results:d.results,duration:d.duration});abt();if(d.errors){setErr(`部分失败: ${d.errors.join('; ')}`);setTimeout(()=>setErr(null),10000);}
+      const d=await createGenerationAPI().audio(params,{signal:controller.signal});
+      updateTask(tid,{generationId:d.generationId||tid,status:'done',results:d.results,duration:d.duration});showToast('生成完成','success');if(d.errors){setErr(`部分失败: ${d.errors.join('; ')}`);setTimeout(()=>setErr(null),10000);}
     }catch(e){if(e.name==='AbortError'){setErr('任务已取消');showToast('任务已取消','info');setTimeout(()=>setErr(null),3000);}else{updateTask(tid,{status:'failed',error:e.message});setErr(e.message);showToast(`失败: ${e.message}`,'error');setTimeout(()=>setErr(null),10000);}}finally{unregisterTaskAbort(tid);setGc(c=>c-1);}
-  },[inputs,lang,speaker,instr,ra,ev,et,vd,gn,emoMode,ea,can,ic,addTask,updateTask,registerTaskAbort,unregisterTaskAbort]);
+  },[inputs,lang,speaker,instr,ra,ev,et,vd,emoMode,ea,can,ic,addTask,updateTask,registerTaskAbort,unregisterTaskAbort]);
 
   return (
     <div className="h-full flex overflow-hidden">
@@ -61,7 +57,6 @@ export default function AudioStudio({ mode = 'speech', active = true }) {
             <button onClick={()=>setOptimizeOpen(!optimizeOpen)} className={`px-3 py-1.5 rounded-lg text-xs border transition-all ${optimizeOpen?'bg-primary/10 text-primary border-primary/30':'bg-white/[0.03] text-white/40 border-border hover:text-white hover:bg-white/10'}`}>
               {optimizeOpen?'关闭优化':'优化 Prompt'}
             </button>
-            <SimpleDropdown title="数量" options={['1','2','4']} selected={String(gn)} onSelect={(v)=>setGn(parseInt(v))}/>
             <GenerateButton onClick={()=>gen()} disabled={!can} label={can?'生成语音':ic?'请上传参考音频并输入文本':'请输入文本'}/>
           </div>
           {err&&<div className="px-2 py-1 bg-red-500/10 border border-red-500/20 rounded-md"><p className="text-red-400 text-[10px]">{err}</p></div>}

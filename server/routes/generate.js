@@ -350,9 +350,8 @@ generateRouter.post('/image', async (req, res) => {
   let allTempFiles, generationId;
   const startTime = Date.now();
   try {
-    const { model, mode, prompt, size, resolution, resolution_preset, aspect_ratio, image, images, negative_prompt, seed, num_inference_steps, gen_num } = req.body;
+    const { model, mode, prompt, size, resolution, resolution_preset, aspect_ratio, image, images, negative_prompt, seed, num_inference_steps } = req.body;
     const username = req.user.username;
-    const genCount = Math.min(Math.max(parseInt(gen_num) || 1, 1), 4);
     const modelId = modelIdOf(model, 'Qwen-Image');
     const pipelines = assertKnown(modelId, IMAGE_MODEL_PIPELINES);
 
@@ -389,7 +388,7 @@ generateRouter.post('/image', async (req, res) => {
     const tasks = [];
     const timestamp = formatTimestamp();
 
-    for (let i = 0; i < genCount; i++) {
+    { const i = 0;
       const form = new FormData();
       form.append('prompt', prompt.trim());
       form.append('height', String(height));
@@ -451,7 +450,6 @@ generateRouter.post('/image', async (req, res) => {
         num_inference_steps: steps,
         seed: (seed !== undefined && seed !== null && seed !== '') ? seed : null,
         pipeline_name: pipelineName,
-        gen_num: genCount,
       },
       results,
     };
@@ -495,9 +493,8 @@ generateRouter.post('/video', async (req, res) => {
   let allTempFiles, generationId;
   const startTime = Date.now();
   try {
-    const { model, mode, prompt, image_base64, negative_prompt, seed, duration, resolution, resolution_preset, aspect_ratio, quality, audio_base64, audio_insert_position, gen_num } = req.body;
+    const { model, mode, prompt, image_base64, negative_prompt, seed, duration, resolution, resolution_preset, aspect_ratio, quality, audio_base64, audio_insert_position } = req.body;
     const username = req.user.username;
-    const genCount = Math.min(Math.max(parseInt(gen_num) || 1, 1), 4);
     const modelId = modelIdOf(model, 'LTX-2');
     const pipelines = assertKnown(modelId, VIDEO_MODEL_PIPELINES);
 
@@ -542,7 +539,7 @@ generateRouter.post('/video', async (req, res) => {
     const timestamp = formatTimestamp();
     const tasks = [];
 
-    for (let i = 0; i < genCount; i++) {
+    { const i = 0;
       const form = new FormData();
       form.append('prompt', videoPrompt);
 
@@ -627,7 +624,6 @@ generateRouter.post('/video', async (req, res) => {
         pipeline_name: pipelineName,
         has_audio: hasAudio,
         audio_insert_position: audioInsertPosition,
-        gen_num: genCount,
       },
       results,
     };
@@ -675,9 +671,8 @@ generateRouter.post('/interpolation', async (req, res) => {
   let allTempFiles, generationId;
   const startTime = Date.now();
   try {
-    const { model, prompt, frames, frame_positions, frame_strengths, negative_prompt, seed, duration, resolution, resolution_preset, aspect_ratio, audio_base64, audio_insert_position, gen_num } = req.body;
+    const { model, prompt, frames, frame_positions, frame_strengths, negative_prompt, seed, duration, resolution, resolution_preset, aspect_ratio, audio_base64, audio_insert_position } = req.body;
     const username = req.user.username;
-    const genCount = Math.min(Math.max(parseInt(gen_num) || 1, 1), 4);
     const modelId = modelIdOf(model, 'LTX-2-Interpolation');
     const pipelines = assertKnown(modelId, INTERPOLATION_MODEL_PIPELINES);
 
@@ -777,7 +772,7 @@ generateRouter.post('/interpolation', async (req, res) => {
     const timestamp = formatTimestamp();
     const tasks = [];
 
-    for (let g = 0; g < genCount; g++) {
+    { const g = 0;
       const form = new FormData();
       form.append('prompt', interpPrompt);
       form.append('height', String(height));
@@ -862,7 +857,6 @@ generateRouter.post('/interpolation', async (req, res) => {
         keyframe_count: frames.length,
         has_audio: hasAudio,
         audio_insert_position: audioInsertPosition,
-        gen_num: genCount,
       },
       results,
     };
@@ -909,10 +903,9 @@ generateRouter.post('/audio', async (req, res) => {
   let allTempFiles, generationId;
   const startTime = Date.now();
   try {
-    const { model, mode, inputs, language, speaker, instruct, ref_audio_base64, emo_vector, emo_text, pipeline, gen_num, use_random, emo_audio_base64, emo_alpha } = req.body;
+    const { model, mode, inputs, language, speaker, instruct, ref_audio_base64, emo_vector, emo_text, pipeline, use_random, emo_audio_base64, emo_alpha } = req.body;
     const username = req.user.username;
     const text = inputs?.trim();
-    const genCount = Math.min(Math.max(parseInt(gen_num) || 1, 1), 4);
 
     if (!text) {
       return res.status(400).json({ error: 'Input text is required' });
@@ -966,7 +959,7 @@ generateRouter.post('/audio', async (req, res) => {
     const timestamp = formatTimestamp();
     const tasks = [];
 
-    for (let i = 0; i < genCount; i++) {
+    { const i = 0;
       const form = new FormData();
       form.append('text', text);
 
@@ -1041,7 +1034,7 @@ generateRouter.post('/audio', async (req, res) => {
       type: generationType,
       model: modelId,
       prompt: text,
-      params: { ...paramsRecord, gen_num: genCount },
+      params: paramsRecord,
       results,
     };
 

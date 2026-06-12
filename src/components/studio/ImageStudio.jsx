@@ -1,9 +1,8 @@
-import { useState, useCallback, useEffect, useRef } from 'react';
+import { useState, useCallback, useEffect } from 'react';
 import { useLocation } from 'react-router-dom';
 import { createGenerationAPI } from '../../api/client';
 import { imageModels, getImageModelById } from '../../data/models';
 import ModelDropdown from '../common/ModelDropdown';
-import SimpleDropdown from '../common/SimpleDropdown';
 import ResolutionSelector from '../common/ResolutionSelector';
 import ImageUploader from '../common/ImageUploader';
 import PromptInput from '../common/PromptInput';
@@ -20,17 +19,14 @@ export default function ImageStudio({ mode = 'text2image', active = true }) {
   const [sid,setSid]=useState(ie?imageModels[1].id:imageModels[0].id);const [size,setSize]=useState(imageModels[0].defaultSize);const [resolutionPreset,setResolutionPreset]=useState(imageModels[0].defaultResolutionPreset);const [aspectRatio,setAspectRatio]=useState(imageModels[0].defaultAspectRatio);
   const [refImgs,setRefImgs]=useState([]);const [prompt,setPrompt]=useState('');useEffect(()=>{if(loc.state?.reusePrompt)setPrompt(loc.state.reusePrompt)},[loc.key]);
   const [np,setNp]=useState('low quality, blurry, distorted, deformed, bad anatomy, extra limbs, watermark, text, signature');const [seed,setSeed]=useState('');
-  const [steps,setSteps]=useState(imageModels[0].defaultInferenceSteps);const [gn,setGn]=useState(1);
+  const [steps,setSteps]=useState(imageModels[0].defaultInferenceSteps);
   const [gc,setGc]=useState(0);const [err,setErr]=useState(null);
   const cm=getImageModelById(sid);const can=ie?(prompt.trim()&&refImgs.length>0):!!prompt.trim();
   useEffect(()=>{if(active&&optimizeOpen)setOptimizePanel({prompt,type:ie?'image-edit':'text2image',source:ie?'image-edit':'image',onApply:setPrompt});},[active,optimizeOpen,prompt,setOptimizePanel,ie]);
-  const tcRef=useRef(0),ttRef=useRef(0);
-  const bt=()=>{tcRef.current++;clearTimeout(ttRef.current);ttRef.current=setTimeout(()=>{showToast(`生成完成 (${tcRef.current} 个)`,'success');tcRef.current=0;},500);};
-
   const gen=useCallback(async(sp, sn)=>{const p=sp||prompt;const n=sn!==undefined?sn:np;if(!(ie?(p.trim()&&refImgs.length>0):!!p.trim()))return;const tid=_tid();const controller=new AbortController();registerTaskAbort(tid,controller);addTask({id:tid,generationId:null,type:ie?'image-edit':'image',prompt:p.trim(),model:cm.name,status:'generating',results:null,error:null});setGc(c=>c+1);setErr(null);showToast('任务已提交','info');
-    try{let ib;if(refImgs.length>0)ib=await Promise.all(refImgs.map(f=>readFileAsBase64(f)));const d=await createGenerationAPI().image({model:cm,mode:ie?'image-edit':'image',prompt:p.trim(),size,resolution_preset:resolutionPreset,aspect_ratio:aspectRatio,images:ib,negative_prompt:n.trim()||undefined,seed:seed||undefined,num_inference_steps:steps,gen_num:gn},{signal:controller.signal});updateTask(tid,{generationId:d.generationId||tid,status:'done',results:d.results,duration:d.duration});bt();if(d.errors){setErr(`部分失败: ${d.errors.join('; ')}`);setTimeout(()=>setErr(null),10000);}}
+    try{let ib;if(refImgs.length>0)ib=await Promise.all(refImgs.map(f=>readFileAsBase64(f)));const d=await createGenerationAPI().image({model:cm,mode:ie?'image-edit':'image',prompt:p.trim(),size,resolution_preset:resolutionPreset,aspect_ratio:aspectRatio,images:ib,negative_prompt:n.trim()||undefined,seed:seed||undefined,num_inference_steps:steps},{signal:controller.signal});updateTask(tid,{generationId:d.generationId||tid,status:'done',results:d.results,duration:d.duration});showToast('生成完成','success');if(d.errors){setErr(`部分失败: ${d.errors.join('; ')}`);setTimeout(()=>setErr(null),10000);}}
     catch(e){if(e.name==='AbortError'){setErr('任务已取消');showToast('任务已取消','info');setTimeout(()=>setErr(null),3000);}else{updateTask(tid,{status:'failed',error:e.message});setErr(e.message);showToast(`失败: ${e.message}`,'error');setTimeout(()=>setErr(null),10000);}}finally{unregisterTaskAbort(tid);setGc(c=>c-1);}
-  },[prompt,np,seed,steps,cm,size,resolutionPreset,aspectRatio,refImgs,gn,can,ie,addTask,updateTask,registerTaskAbort,unregisterTaskAbort]);
+  },[prompt,np,seed,steps,cm,size,resolutionPreset,aspectRatio,refImgs,can,ie,addTask,updateTask,registerTaskAbort,unregisterTaskAbort]);
 
   return (
     <div className="h-full flex overflow-hidden">
@@ -48,7 +44,6 @@ export default function ImageStudio({ mode = 'text2image', active = true }) {
             <button onClick={()=>setOptimizeOpen(!optimizeOpen)} className={`px-3 py-1.5 rounded-lg text-xs border transition-all ${optimizeOpen?'bg-primary/10 text-primary border-primary/30':'bg-white/[0.03] text-white/40 border-border hover:text-white hover:bg-white/10'}`}>
               {optimizeOpen?'关闭优化':'优化 Prompt'}
             </button>
-            <SimpleDropdown title="数量" options={['1','2','4']} selected={String(gn)} onSelect={(v)=>setGn(parseInt(v))}/>
             <GenerateButton onClick={()=>gen()} disabled={!can} label={can?(ie?'开始编辑':'生成图片'):ie?'请上传参考图片并输入提示词':'输入 Prompt'}/>
           </div>
           {err&&<div className="px-2 py-1 bg-red-500/10 border border-red-500/20 rounded-md"><p className="text-red-400 text-[10px]">{err}</p></div>}
