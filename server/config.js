@@ -41,6 +41,8 @@ export const config = {
   DOWNLOAD_RETRIES: intEnv('DOWNLOAD_RETRIES', 3),
   DOWNLOAD_RETRY_DELAY_MS: intEnv('DOWNLOAD_RETRY_DELAY_MS', 5000),
   POLL_TOTAL_TIMEOUT_MS: intEnv('POLL_TOTAL_TIMEOUT_MS', 600000),
+  // 视频/插帧在 AI 后端排队较久，单独放宽总轮询时长（默认 20 分钟）
+  VIDEO_POLL_TOTAL_TIMEOUT_MS: intEnv('VIDEO_POLL_TOTAL_TIMEOUT_MS', 1200000),
 
   // Gitee LLM API (Prompt 翻译)
   GITEE_LLM_URL: process.env.GITEE_LLM_URL || 'https://ai.gitee.com/v1/chat/completions',

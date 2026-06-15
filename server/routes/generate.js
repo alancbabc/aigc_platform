@@ -293,8 +293,8 @@ async function submitTask(baseUrl, formData) {
   return response.data.task_id;
 }
 
-async function pollTask(baseUrl, taskId, generationId) {
-  const deadline = Date.now() + (config.POLL_TOTAL_TIMEOUT_MS || 300000);
+async function pollTask(baseUrl, taskId, generationId, totalTimeoutMs = config.POLL_TOTAL_TIMEOUT_MS) {
+  const deadline = Date.now() + (totalTimeoutMs || config.POLL_TOTAL_TIMEOUT_MS || 300000);
   for (let attempt = 1; attempt <= config.MAX_POLL_ATTEMPTS && Date.now() < deadline; attempt++) {
     await new Promise(resolve => setTimeout(resolve, config.POLL_INTERVAL_MS));
     try {
@@ -570,7 +570,7 @@ generateRouter.post('/video', async (req, res) => {
         const taskId = await submitTask(config.AI_VIDEO_URL, form);
         registerTaskId(generationId, taskId);
         updateTaskStatus(generationId, taskId, 'submitted');
-        await pollTask(config.AI_VIDEO_URL, taskId, generationId);
+        await pollTask(config.AI_VIDEO_URL, taskId, generationId, config.VIDEO_POLL_TOTAL_TIMEOUT_MS);
         updateTaskStatus(generationId, taskId, 'downloading');
         await downloadTask(config.AI_VIDEO_URL, taskId, savePath);
         updateTaskStatus(generationId, taskId, 'done');
@@ -799,7 +799,7 @@ generateRouter.post('/interpolation', async (req, res) => {
         const taskId = await submitTask(config.AI_VIDEO_URL, form);
         registerTaskId(generationId, taskId);
         updateTaskStatus(generationId, taskId, 'submitted');
-        await pollTask(config.AI_VIDEO_URL, taskId, generationId);
+        await pollTask(config.AI_VIDEO_URL, taskId, generationId, config.VIDEO_POLL_TOTAL_TIMEOUT_MS);
         updateTaskStatus(generationId, taskId, 'downloading');
         await downloadTask(config.AI_VIDEO_URL, taskId, savePath);
         updateTaskStatus(generationId, taskId, 'done');
