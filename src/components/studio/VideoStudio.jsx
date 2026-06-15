@@ -16,8 +16,8 @@ import { readFileAsBase64 } from '../../utils/fileHelpers';
 import { useTasks } from '../../contexts/TaskContext';
 
 const CFG = {
-  text2video: { ni: false, sq: false, can: (p) => !!p.trim(), btn: '生成音视频', bo: '请输入 Prompt' },
-  image2video: { ni: true, sq: false, can: (p,i) => !!p.trim()&&i, btn: '生成音视频', bo: '请上传图片并输入 Prompt' },
+  text2video: { ni: false, sq: true, can: (p) => !!p.trim(), btn: '生成音视频', bo: '请输入 Prompt' },
+  image2video: { ni: true, sq: true, can: (p,i) => !!p.trim()&&i, btn: '生成音视频', bo: '请上传图片并输入 Prompt' },
 };
 let _vs=0;function _vid(){return `c_${Date.now()}_${++_vs}`;}
 
@@ -51,7 +51,7 @@ export default function VideoStudio({ mode = 'text2video', active = true }) {
         <div className="flex-1 flex flex-col min-h-0 p-4 pb-0 gap-3 overflow-y-auto">
           <div className="flex items-center gap-2 flex-wrap">
             <ModelDropdown models={videoModels} selectedModel={sid} onSelect={(m)=>setSid(m.id)}/>
-            {cfg.sq&&<SimpleDropdown title="质量" options={cm.qualities.map(q=>q.name)} selected={cm.qualities.find(q=>q.id===qual)?.name||''} onSelect={(v)=>{const q=cm.qualities.find(q=>q.name===v);if(q)setQual(q.id);}}/>}
+            {cfg.sq&&!audio&&<SimpleDropdown title="质量" options={cm.qualities.map(q=>q.name)} selected={cm.qualities.find(q=>q.id===qual)?.name||''} onSelect={(v)=>{const q=cm.qualities.find(q=>q.name===v);if(q)setQual(q.id);}}/>}
             <ResolutionSelector initialValue={res} resolutionOptions={cm.resolutionOptions} aspectRatioOptions={cm.aspectRatioOptions} initialResolution={resolutionPreset} initialAspectRatio={aspectRatio} onSelect={(value, meta)=>{setRes(value);setResolutionPreset(meta.resolution);setAspectRatio(meta.aspectRatio);}} />
             <SimpleDropdown title="时长" options={cm.durations.map(String)} selected={String(dur)} onSelect={(v)=>setDur(parseInt(v))}/>
           </div>

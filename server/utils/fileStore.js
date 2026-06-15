@@ -33,7 +33,7 @@ export function readJSON(filePath) {
   }
 }
 
-function _writeAtom(filePath, data) {
+async function _writeAtom(filePath, data) {
   const dir = path.dirname(filePath);
   if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
   const tmpPath = path.join(dir, `.tmp_${uuidv4()}.json`);
@@ -52,7 +52,8 @@ function _writeAtom(filePath, data) {
       }
       lastError = err;
       if (!retryable.has(err.code)) break;
-      Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, 20 * (attempt + 1));
+      // 异步退避，避免用 Atomics.wait 同步阻塞整个事件循环
+      await new Promise(resolve => setTimeout(resolve, 20 * (attempt + 1)));
     }
   }
   try { fs.unlinkSync(tmpPath); } catch {}
@@ -64,7 +65,7 @@ export async function writeJSON(filePath, data) {
   const lockKey = path.resolve(filePath);
   await acquireLock(lockKey);
   try {
-    _writeAtom(filePath, data);
+    await _writeAtom(filePath, data);
   } finally {
     releaseLock(lockKey);
   }
@@ -77,7 +78,7 @@ export async function lockedUpdate(filePath, updater) {
   try {
     const current = readJSON(filePath);
     const updated = updater(current);
-    _writeAtom(filePath, updated);
+    await _writeAtom(filePath, updated);
     return updated;
   } finally {
     releaseLock(lockKey);

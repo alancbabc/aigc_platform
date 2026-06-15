@@ -237,6 +237,16 @@ const VIDEO_MODEL_PIPELINES = {
   },
 };
 
+// 把前端传来的 quality 归一化为管线档位 key（'standard' | 'high'）。
+// 兼容三种取值：档位 key、实际 pipeline 名、空值（默认高质量）。
+function resolveVideoQuality(quality, pipelines) {
+  if (quality === undefined || quality === null || quality === '') return 'high';
+  const value = String(quality).toLowerCase();
+  if (value === 'standard' || value === pipelines.standard) return 'standard';
+  if (value === 'high' || value === pipelines.high) return 'high';
+  throw httpError(`quality '${quality}' is not valid. Allowed: standard, high`);
+}
+
 const INTERPOLATION_MODEL_PIPELINES = {
   'LTX-2-Interpolation': {
     interpolation: 'keyframe_interpolation_two_stage',
@@ -501,7 +511,8 @@ generateRouter.post('/video', async (req, res) => {
     }
     const generationType = hasImage || mode === 'image2video' ? 'image2video' : 'video';
 
-    const pipelineName = hasAudio ? pipelines.audio : pipelines.high;
+    const videoQuality = resolveVideoQuality(quality, pipelines);
+    const pipelineName = hasAudio ? pipelines.audio : pipelines[videoQuality];
     const videoSteps = hasAudio ? 30 : 15;
 
     const originalPrompt = prompt.trim();

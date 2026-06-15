@@ -1,9 +1,10 @@
 import fs from 'fs';
 import path from 'path';
+import { fileURLToPath } from 'url';
 import axios from 'axios';
 import { config } from '../config.js';
 
-const __dirname = path.dirname(new URL(import.meta.url).pathname).replace(/^\/([A-Za-z]:)/, '$1');
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const SKILL_PATH = path.join(__dirname, '..', '..', 'LTX_SKILL.md');
 const IMAGE_SKILL_PATH = path.join(__dirname, '..', '..', 'IMAGE_SKILL.md');
 
