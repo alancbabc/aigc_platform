@@ -15,7 +15,7 @@ const LANG=['auto','chinese','english','french','german','italian','japanese','k
 let _as=0;function _aid(){return `c_${Date.now()}_${++_as}`;}
 
 export default function AudioStudio({ mode = 'speech', active = true }) {
-  const ic=mode==='clone';const{addTask,updateTask,optimizeOpen,setOptimizeOpen,setOptimizePanel,registerTaskAbort,unregisterTaskAbort}=useTasks();const loc=useLocation();
+  const ic=mode==='clone';const{addTask,updateTask,optimizeOpen,setOptimizeOpen,setOptimizePanel}=useTasks();const loc=useLocation();
   const [inputs,setInputs]=useState('');useEffect(()=>{if(loc.state?.reusePrompt)setInputs(loc.state.reusePrompt)},[loc.key]);
   const [lang,setLang]=useState('auto');const [speaker,setSpeaker]=useState(getAudioModelById('Qwen3-TTS').speakers[0].id);
   const [instr,setInstr]=useState('');const [vd,setVd]=useState(false);
@@ -24,14 +24,14 @@ export default function AudioStudio({ mode = 'speech', active = true }) {
   const [gc,setGc]=useState(0);const [err,setErr]=useState(null);
   const can=ic?(!!inputs.trim()&&!!ra):!!inputs.trim();
   useEffect(()=>{if(active&&optimizeOpen)setOptimizePanel({prompt:inputs,type:'audio',source:ic?'clone':'audio',onApply:setInputs});},[active,optimizeOpen,inputs,setOptimizePanel,ic]);
-  const gen=useCallback(async(sp)=>{const p=sp||inputs;const tts=getAudioModelById('Qwen3-TTS'),idx=getAudioModelById('IndexTTS-2');if(!(ic?(!!p.trim()&&!!ra):!!p.trim()))return;const tid=_aid();const controller=new AbortController();registerTaskAbort(tid,controller);addTask({id:tid,generationId:null,type:mode,prompt:p.trim(),model:ic?idx.name:tts.name,status:'generating',results:null,error:null});setGc(c=>c+1);setErr(null);showToast('任务已提交','info');
-    try{const params={model:ic?idx:tts,mode:ic?'clone':'audio',inputs:p.trim()};
+  const gen=useCallback(async(sp)=>{const p=sp||inputs;const tts=getAudioModelById('Qwen3-TTS'),idx=getAudioModelById('IndexTTS-2');if(!(ic?(!!p.trim()&&!!ra):!!p.trim()))return;const tid=_aid();addTask({id:tid,generationId:tid,type:mode,prompt:p.trim(),model:ic?idx.name:tts.name,status:'generating',results:null,error:null});setGc(c=>c+1);setErr(null);showToast('任务已提交','info');
+    try{const params={client_generation_id:tid,model:ic?idx:tts,mode:ic?'clone':'audio',inputs:p.trim()};
       if(ic){if(ra)params.ref_audio_base64=await readFileAsBase64(ra);if(emoMode==='random'){params.use_random=true;}else if(emoMode==='vector'){params.emo_vector=ev;}else if(emoMode==='text'){if(et.trim())params.emo_text=et.trim();}else if(emoMode==='audio'){if(ea)params.emo_audio_base64=await readFileAsBase64(ea);}}
       else{params.language=lang;if(vd){params.pipeline='qwen_tts_voicedesign';if(instr.trim())params.instruct=instr.trim();}else{params.speaker=speaker;if(instr.trim())params.instruct=instr.trim();}}
-      const d=await createGenerationAPI().audio(params,{signal:controller.signal});
+      const d=await createGenerationAPI().audio(params);
       updateTask(tid,{generationId:d.generationId||tid,status:'done',results:d.results,duration:d.duration});showToast('生成完成','success');if(d.errors){setErr(`部分失败: ${d.errors.join('; ')}`);setTimeout(()=>setErr(null),10000);}
-    }catch(e){if(e.name==='AbortError'){setErr('任务已取消');showToast('任务已取消','info');setTimeout(()=>setErr(null),3000);}else{updateTask(tid,{status:'failed',error:e.message});setErr(e.message);showToast(`失败: ${e.message}`,'error');setTimeout(()=>setErr(null),10000);}}finally{unregisterTaskAbort(tid);setGc(c=>c-1);}
-  },[inputs,lang,speaker,instr,ra,ev,et,vd,emoMode,ea,can,ic,addTask,updateTask,registerTaskAbort,unregisterTaskAbort]);
+    }catch(e){updateTask(tid,{status:'failed',error:e.message});setErr(e.message);showToast(`失败: ${e.message}`,'error');setTimeout(()=>setErr(null),10000);}finally{setGc(c=>c-1);}
+  },[inputs,lang,speaker,instr,ra,ev,et,vd,emoMode,ea,can,ic,addTask,updateTask]);
 
   return (
     <div className="h-full flex overflow-hidden">

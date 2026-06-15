@@ -1,9 +1,8 @@
-import { createContext, useState, useEffect, useCallback } from 'react';
+import { createContext, useCallback, useEffect, useState } from 'react';
 import { apiPost, historyAPI } from '../api/client';
+import { clearAuth, clearLegacyAuth, readAuth, saveAuth as saveStoredAuth } from '../utils/authStorage';
 
 export const AuthContext = createContext(null);
-
-const STORAGE_KEY = 'aigc_auth';
 
 export function AuthProvider({ children }) {
   const [user, setUser] = useState(null);
@@ -12,34 +11,25 @@ export function AuthProvider({ children }) {
 
   useEffect(() => {
     (async () => {
+      clearLegacyAuth();
       try {
-        const stored = localStorage.getItem(STORAGE_KEY);
-        if (stored) {
-          const { user, token: storedToken } = JSON.parse(stored);
-          if (user && storedToken) {
-            const res = await fetch('/api/history', {
-              headers: { Authorization: `Bearer ${storedToken}` },
-            });
-            if (res.status === 401) {
-              localStorage.removeItem(STORAGE_KEY);
-            } else if (res.ok) {
-              setUser(user);
-              setToken(storedToken);
-            }
-            // On non-2xx non-401, don't set auth — server may be down
+        const stored = readAuth();
+        if (stored?.user && stored?.token) {
+          const res = await fetch('/api/history', {
+            headers: { Authorization: `Bearer ${stored.token}` },
+          });
+          if (res.status === 401) {
+            clearAuth();
+          } else if (res.ok) {
+            setUser(stored.user);
+            setToken(stored.token);
           }
         }
       } catch {
-        // Network error — keep the token, try again next load
-        const stored = localStorage.getItem(STORAGE_KEY);
-        if (stored) {
-          try {
-            const { user, token: savedToken } = JSON.parse(stored);
-            if (user && savedToken) {
-              setUser(user);
-              setToken(savedToken);
-            }
-          } catch {}
+        const stored = readAuth();
+        if (stored?.user && stored?.token) {
+          setUser(stored.user);
+          setToken(stored.token);
         }
       } finally {
         setLoading(false);
@@ -51,10 +41,7 @@ export function AuthProvider({ children }) {
     historyAPI.clearCache();
     setUser(userData);
     setToken(authToken);
-    localStorage.setItem(STORAGE_KEY, JSON.stringify({
-      user: userData,
-      token: authToken,
-    }));
+    saveStoredAuth(userData, authToken);
   }, []);
 
   const login = useCallback(async (username, password) => {
@@ -73,7 +60,7 @@ export function AuthProvider({ children }) {
     historyAPI.clearCache();
     setUser(null);
     setToken(null);
-    localStorage.removeItem(STORAGE_KEY);
+    clearAuth();
     sessionStorage.removeItem('aigc_tasks');
   }, []);
 

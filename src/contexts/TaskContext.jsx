@@ -1,4 +1,4 @@
-import { createContext, useContext, useState, useCallback, useEffect, useRef } from 'react';
+import { createContext, useContext, useState, useCallback, useEffect } from 'react';
 import { generationTaskAPI } from '../api/client';
 
 const TaskContext = createContext(null);
@@ -8,8 +8,9 @@ const MAX_TASKS = 50;
 const MAX_AGE_MS = 24 * 60 * 60 * 1000;
 const ACTIVE_POLL_INTERVAL_MS = 3000;
 const HIDDEN_POLL_INTERVAL_MS = 15000;
+const MISSING_GENERATION_GRACE_MS = 30000;
+const TASK_SYNCING_MESSAGE = '任务状态正在同步，请稍候';
 const TASK_LOST_MESSAGE = '服务端已找不到该任务状态，请稍后到历史记录查看结果';
-const TASK_CANCELLED_MESSAGE = '任务已取消';
 
 function isMissingGenerationError(message) {
   return /generation not found|not found|404/i.test(message || '');
@@ -39,7 +40,6 @@ function loadTasks() {
 
 export function TaskProvider({ children }) {
   const [tasks, setTasks] = useState(loadTasks);
-  const abortControllersRef = useRef(new Map());
   const [historyVersion, setHistoryVersion] = useState(0);
   const [lastTaskType, setLastTaskType] = useState(null);
   const [optimizeOpen, setOptimizeOpen] = useState(false);
@@ -85,7 +85,7 @@ export function TaskProvider({ children }) {
           if (update.data) {
             const { status, results, error, duration } = update.data;
             const nextStatus = status === 'cancelled' ? 'failed' : status;
-            const nextError = error || (status === 'cancelled' ? TASK_CANCELLED_MESSAGE : null);
+            const nextError = error || null;
             const nextResults = results || task.results;
             const nextDuration = ['done', 'failed', 'cancelled'].includes(status) ? (duration ?? task.duration) : task.duration;
             if (
@@ -112,6 +112,11 @@ export function TaskProvider({ children }) {
           }
           if (['generating', 'submitted', 'unknown'].includes(task.status)) {
             if (update.lost) {
+              if (Date.now() - (task.createdAt || 0) < MISSING_GENERATION_GRACE_MS) {
+                if (task.status === 'unknown' && task.error === TASK_SYNCING_MESSAGE) return task;
+                changed = true;
+                return { ...task, status: 'unknown', error: TASK_SYNCING_MESSAGE, updatedAt: Date.now() };
+              }
               changed = true;
               return { ...task, generationId: null, status: 'unknown', error: TASK_LOST_MESSAGE, updatedAt: Date.now() };
             }
@@ -157,46 +162,8 @@ export function TaskProvider({ children }) {
     }));
   }, []);
 
-  const registerTaskAbort = useCallback((taskId, controller) => {
-    if (taskId && controller) abortControllersRef.current.set(taskId, controller);
-  }, []);
-
-  const unregisterTaskAbort = useCallback((taskId) => {
-    if (taskId) abortControllersRef.current.delete(taskId);
-  }, []);
-
   const removeTask = useCallback((generationId) => {
     setTasks(prev => prev.filter(t => t.id !== generationId && t.generationId !== generationId));
-  }, []);
-
-  const cancelTask = useCallback(async (generationId) => {
-    if (!generationId) return;
-    const localController = abortControllersRef.current.get(generationId);
-    if (localController) {
-      localController.abort();
-      abortControllersRef.current.delete(generationId);
-      setTasks(prev => prev.map(t =>
-        (t.id === generationId || t.generationId === generationId)
-          ? { ...t, status: 'failed', error: TASK_CANCELLED_MESSAGE, updatedAt: Date.now() }
-          : t
-      ));
-      return;
-    }
-    try {
-      await generationTaskAPI.cancel(generationId);
-    } catch (err) {
-      setTasks(prev => prev.map(t =>
-        (t.id === generationId || t.generationId === generationId)
-          ? { ...t, error: `取消请求失败: ${err.message}`, updatedAt: Date.now() }
-          : t
-      ));
-      return;
-    }
-    setTasks(prev => prev.map(t =>
-      (t.id === generationId || t.generationId === generationId)
-        ? { ...t, status: 'failed', error: TASK_CANCELLED_MESSAGE, updatedAt: Date.now() }
-        : t
-    ));
   }, []);
 
   const clearDone = useCallback(() => {
@@ -210,7 +177,6 @@ export function TaskProvider({ children }) {
   return (
     <TaskContext.Provider value={{
       tasks, addTask, updateTask, removeTask, clearDone,
-      cancelTask, registerTaskAbort, unregisterTaskAbort,
       historyVersion, notifyHistoryChange,
       lastTaskType, setLastTaskType,
       optimizeOpen, setOptimizeOpen,

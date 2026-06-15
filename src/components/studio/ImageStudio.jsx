@@ -15,7 +15,7 @@ import { useTasks } from '../../contexts/TaskContext';
 let _ts=0;function _tid(){return `c_${Date.now()}_${++_ts}`;}
 
 export default function ImageStudio({ mode = 'text2image', active = true }) {
-  const ie=mode==='image2image';const{addTask,updateTask,optimizeOpen,setOptimizeOpen,setOptimizePanel,registerTaskAbort,unregisterTaskAbort}=useTasks();const loc=useLocation();
+  const ie=mode==='image2image';const{addTask,updateTask,optimizeOpen,setOptimizeOpen,setOptimizePanel}=useTasks();const loc=useLocation();
   const [sid,setSid]=useState(ie?imageModels[1].id:imageModels[0].id);const [size,setSize]=useState(imageModels[0].defaultSize);const [resolutionPreset,setResolutionPreset]=useState(imageModels[0].defaultResolutionPreset);const [aspectRatio,setAspectRatio]=useState(imageModels[0].defaultAspectRatio);
   const [refImgs,setRefImgs]=useState([]);const [prompt,setPrompt]=useState('');useEffect(()=>{if(loc.state?.reusePrompt)setPrompt(loc.state.reusePrompt)},[loc.key]);
   const [np,setNp]=useState('low quality, blurry, distorted, deformed, bad anatomy, extra limbs, watermark, text, signature');const [seed,setSeed]=useState('');
@@ -23,10 +23,10 @@ export default function ImageStudio({ mode = 'text2image', active = true }) {
   const [gc,setGc]=useState(0);const [err,setErr]=useState(null);
   const cm=getImageModelById(sid);const can=ie?(prompt.trim()&&refImgs.length>0):!!prompt.trim();
   useEffect(()=>{if(active&&optimizeOpen)setOptimizePanel({prompt,type:ie?'image-edit':'text2image',source:ie?'image-edit':'image',onApply:setPrompt});},[active,optimizeOpen,prompt,setOptimizePanel,ie]);
-  const gen=useCallback(async(sp, sn)=>{const p=sp||prompt;const n=sn!==undefined?sn:np;if(!(ie?(p.trim()&&refImgs.length>0):!!p.trim()))return;const tid=_tid();const controller=new AbortController();registerTaskAbort(tid,controller);addTask({id:tid,generationId:null,type:ie?'image-edit':'image',prompt:p.trim(),model:cm.name,status:'generating',results:null,error:null});setGc(c=>c+1);setErr(null);showToast('任务已提交','info');
-    try{let ib;if(refImgs.length>0)ib=await Promise.all(refImgs.map(f=>readFileAsBase64(f)));const d=await createGenerationAPI().image({model:cm,mode:ie?'image-edit':'image',prompt:p.trim(),size,resolution_preset:resolutionPreset,aspect_ratio:aspectRatio,images:ib,negative_prompt:n.trim()||undefined,seed:seed||undefined,num_inference_steps:steps},{signal:controller.signal});updateTask(tid,{generationId:d.generationId||tid,status:'done',results:d.results,duration:d.duration});showToast('生成完成','success');if(d.errors){setErr(`部分失败: ${d.errors.join('; ')}`);setTimeout(()=>setErr(null),10000);}}
-    catch(e){if(e.name==='AbortError'){setErr('任务已取消');showToast('任务已取消','info');setTimeout(()=>setErr(null),3000);}else{updateTask(tid,{status:'failed',error:e.message});setErr(e.message);showToast(`失败: ${e.message}`,'error');setTimeout(()=>setErr(null),10000);}}finally{unregisterTaskAbort(tid);setGc(c=>c-1);}
-  },[prompt,np,seed,steps,cm,size,resolutionPreset,aspectRatio,refImgs,can,ie,addTask,updateTask,registerTaskAbort,unregisterTaskAbort]);
+  const gen=useCallback(async(sp, sn)=>{const p=sp||prompt;const n=sn!==undefined?sn:np;if(!(ie?(p.trim()&&refImgs.length>0):!!p.trim()))return;const tid=_tid();addTask({id:tid,generationId:tid,type:ie?'image-edit':'image',prompt:p.trim(),model:cm.name,status:'generating',results:null,error:null});setGc(c=>c+1);setErr(null);showToast('任务已提交','info');
+    try{let ib;if(refImgs.length>0)ib=await Promise.all(refImgs.map(f=>readFileAsBase64(f)));const d=await createGenerationAPI().image({client_generation_id:tid,model:cm,mode:ie?'image-edit':'image',prompt:p.trim(),size,resolution_preset:resolutionPreset,aspect_ratio:aspectRatio,images:ib,negative_prompt:n.trim()||undefined,seed:seed||undefined,num_inference_steps:steps});updateTask(tid,{generationId:d.generationId||tid,status:'done',results:d.results,duration:d.duration});showToast('生成完成','success');if(d.errors){setErr(`部分失败: ${d.errors.join('; ')}`);setTimeout(()=>setErr(null),10000);}}
+    catch(e){updateTask(tid,{status:'failed',error:e.message});setErr(e.message);showToast(`失败: ${e.message}`,'error');setTimeout(()=>setErr(null),10000);}finally{setGc(c=>c-1);}
+  },[prompt,np,seed,steps,cm,size,resolutionPreset,aspectRatio,refImgs,can,ie,addTask,updateTask]);
 
   return (
     <div className="h-full flex overflow-hidden">

@@ -97,7 +97,7 @@ function validateParameterList(value, count, { min, max, type, label, frameCount
 }
 
 export default function InterpolationStudio({ active = true }) {
-  const { addTask, updateTask, optimizeOpen, setOptimizeOpen, setOptimizePanel, registerTaskAbort, unregisterTaskAbort } = useTasks();
+  const { addTask, updateTask, optimizeOpen, setOptimizeOpen, setOptimizePanel } = useTasks();
   const loc = useLocation();
   const fileInputRef = useRef(null);
   const framesRef = useRef([]);
@@ -214,11 +214,9 @@ export default function InterpolationStudio({ active = true }) {
     }
 
     const id = taskId();
-    const controller = new AbortController();
-    registerTaskAbort(id, controller);
     addTask({
       id,
-      generationId: null,
+      generationId: id,
       type: 'interpolation',
       prompt: p.trim(),
       model: currentModel.name,
@@ -234,6 +232,7 @@ export default function InterpolationStudio({ active = true }) {
       const framePayload = await Promise.all(frames.map(frame => readFileAsBase64(frame.file)));
       const audioPayload = audio ? await readFileAsBase64(audio) : undefined;
       const data = await createGenerationAPI().interpolation({
+        client_generation_id: id,
         model: currentModel,
         mode: 'interpolation',
         prompt: p.trim(),
@@ -248,8 +247,6 @@ export default function InterpolationStudio({ active = true }) {
         aspect_ratio: aspectRatio,
         audio_base64: audioPayload,
         audio_insert_position: audio ? audioPosition : 0,
-      }, {
-        signal: controller.signal,
       });
 
       updateTask(id, { generationId: data.generationId || id, status: 'done', results: data.results, duration: data.duration });
@@ -263,21 +260,14 @@ export default function InterpolationStudio({ active = true }) {
         setTimeout(() => setError(null), 10000);
       }
     } catch (err) {
-      if (err.name === 'AbortError') {
-        setError('任务已取消');
-        showToast('任务已取消', 'info');
-        setTimeout(() => setError(null), 3000);
-      } else {
-        updateTask(id, { status: 'failed', error: err.message });
-        setError(err.message);
-        showToast(`失败: ${err.message}`, 'error');
-        setTimeout(() => setError(null), 10000);
-      }
+      updateTask(id, { status: 'failed', error: err.message });
+      setError(err.message);
+      showToast(`失败: ${err.message}`, 'error');
+      setTimeout(() => setError(null), 10000);
     } finally {
-      unregisterTaskAbort(id);
       setActiveCount(count => count - 1);
     }
-  }, [prompt, negativePrompt, seed, currentModel, frames, positionValidation.values, strengthValidation.values, parameterError, duration, resolution, resolutionPreset, aspectRatio, audio, audioPosition, addTask, updateTask, registerTaskAbort, unregisterTaskAbort]);
+  }, [prompt, negativePrompt, seed, currentModel, frames, positionValidation.values, strengthValidation.values, parameterError, duration, resolution, resolutionPreset, aspectRatio, audio, audioPosition, addTask, updateTask]);
 
   return (
     <div className="h-full flex overflow-hidden">

@@ -19,7 +19,14 @@ generateRouter.use(authMiddleware);
 // ========= 任务追踪系统 =========
 const activeTasks = new Map();
 
-function createGenerationId() {
+function createGenerationId(clientGenerationId) {
+  if (
+    typeof clientGenerationId === 'string' &&
+    /^[a-zA-Z0-9_-]{8,80}$/.test(clientGenerationId) &&
+    !activeTasks.has(clientGenerationId)
+  ) {
+    return clientGenerationId;
+  }
   return uuidv4();
 }
 
@@ -27,7 +34,6 @@ function trackTask(generationId, userId) {
   const generation = {
     userId,
     tasks: [],
-    cancelled: false,
     createdAt: Date.now(),
   };
   activeTasks.set(generationId, generation);
@@ -64,18 +70,6 @@ function finishGeneration(generationId, error = null, payload = {}) {
   setTimeout(() => activeTasks.delete(generationId), 10 * 60 * 1000).unref?.();
 }
 
-function cancelGeneration(generationId, username) {
-  const gen = activeTasks.get(generationId) || loadGeneration(username, generationId);
-  if (gen && gen.userId === username) {
-    gen.cancelled = true;
-    saveGenerationSoon(generationId, gen);
-  }
-}
-
-function isGenerationCancelled(generationId) {
-  return activeTasks.get(generationId)?.cancelled === true;
-}
-
 function getGenerationForUser(generationId, username) {
   const gen = activeTasks.get(generationId) || loadGeneration(username, generationId);
   if (!gen || gen.userId !== username) return null;
@@ -85,13 +79,11 @@ function getGenerationForUser(generationId, username) {
 generateRouter.get('/:generationId/status', (req, res) => {
   const gen = getGenerationForUser(req.params.generationId, req.user.username);
   if (!gen) return res.status(404).json({ error: 'Generation not found' });
-  const status = gen.cancelled
-    ? 'cancelled'
-    : gen.completed
-      ? 'done'
-      : gen.error
-        ? 'failed'
-        : 'generating';
+  const status = gen.completed
+    ? 'done'
+    : gen.error
+      ? 'failed'
+      : 'generating';
   res.json({
     generationId: req.params.generationId,
     status,
@@ -101,13 +93,6 @@ generateRouter.get('/:generationId/status', (req, res) => {
     historyId: gen.historyId || null,
     duration: gen.finishedAt ? gen.finishedAt - gen.createdAt : Date.now() - gen.createdAt,
   });
-});
-
-generateRouter.post('/:generationId/cancel', (req, res) => {
-  const gen = getGenerationForUser(req.params.generationId, req.user.username);
-  if (!gen) return res.status(404).json({ error: 'Generation not found' });
-  cancelGeneration(req.params.generationId, req.user.username);
-  res.json({ success: true, generationId: req.params.generationId, status: 'cancelled' });
 });
 
 // ========= 工具函数 =========
@@ -302,7 +287,6 @@ async function pollTask(baseUrl, taskId, generationId) {
   const deadline = Date.now() + (config.POLL_TOTAL_TIMEOUT_MS || 300000);
   for (let attempt = 1; attempt <= config.MAX_POLL_ATTEMPTS && Date.now() < deadline; attempt++) {
     await new Promise(resolve => setTimeout(resolve, config.POLL_INTERVAL_MS));
-    if (isGenerationCancelled(generationId)) throw new Error('CANCELLED');
     try {
       const response = await axios.get(`${baseUrl}/status/${taskId}`, { timeout: config.POLL_TIMEOUT_MS });
       const s = response.data;
@@ -314,7 +298,6 @@ async function pollTask(baseUrl, taskId, generationId) {
       }
       throw new Error(`Unknown status: ${s.status}`);
     } catch (err) {
-      if (err.message === 'CANCELLED') throw err;
       if (err.message.startsWith('Task failed') || err.message.startsWith('Unknown')) throw err;
       if (err.response?.status >= 400 && err.response?.status < 500) throw err;
       console.error(`[pollTask] transient AI error (attempt ${attempt}/${config.MAX_POLL_ATTEMPTS}): ${err.message}`);
@@ -350,7 +333,7 @@ generateRouter.post('/image', async (req, res) => {
   let allTempFiles, generationId;
   const startTime = Date.now();
   try {
-    const { model, mode, prompt, size, resolution, resolution_preset, aspect_ratio, image, images, negative_prompt, seed, num_inference_steps } = req.body;
+    const { model, mode, prompt, size, resolution, resolution_preset, aspect_ratio, image, images, negative_prompt, seed, num_inference_steps, client_generation_id } = req.body;
     const username = req.user.username;
     const modelId = modelIdOf(model, 'Qwen-Image');
     const pipelines = assertKnown(modelId, IMAGE_MODEL_PIPELINES);
@@ -377,12 +360,9 @@ generateRouter.post('/image', async (req, res) => {
     const generationType = isEditMode || hasImage ? 'image-edit' : 'image';
     const pipelineName = hasImage ? pipelines.edit : pipelines.text;
 
-    generationId = createGenerationId();
+    generationId = createGenerationId(client_generation_id);
     allTempFiles = [];
     trackTask(generationId, req.user.username);
-    const cancelGenImg = () => cancelGeneration(generationId, req.user.username);
-    res.on('close', cancelGenImg);
-    res.on('finish', () => { res.removeListener('close', cancelGenImg); });
 
     const outputDir = ensureOutputDir(username);
     const tasks = [];
@@ -411,7 +391,6 @@ generateRouter.post('/image', async (req, res) => {
       const savePath = path.join(outputDir, filename);
 
       tasks.push((async () => {
-        if (isGenerationCancelled(generationId)) throw new Error('CANCELLED');
         const taskId = await submitTask(config.AI_IMAGE_URL, form);
         registerTaskId(generationId, taskId);
         updateTaskStatus(generationId, taskId, 'submitted');
@@ -493,7 +472,7 @@ generateRouter.post('/video', async (req, res) => {
   let allTempFiles, generationId;
   const startTime = Date.now();
   try {
-    const { model, mode, prompt, image_base64, negative_prompt, seed, duration, resolution, resolution_preset, aspect_ratio, quality, audio_base64, audio_insert_position } = req.body;
+    const { model, mode, prompt, image_base64, negative_prompt, seed, duration, resolution, resolution_preset, aspect_ratio, quality, audio_base64, audio_insert_position, client_generation_id } = req.body;
     const username = req.user.username;
     const modelId = modelIdOf(model, 'LTX-2');
     const pipelines = assertKnown(modelId, VIDEO_MODEL_PIPELINES);
@@ -528,12 +507,9 @@ generateRouter.post('/video', async (req, res) => {
     const originalPrompt = prompt.trim();
     const { text: videoPrompt, status: translationStatus } = await translatePrompt(originalPrompt);
 
-    generationId = createGenerationId();
+    generationId = createGenerationId(client_generation_id);
     allTempFiles = [];
     trackTask(generationId, req.user.username);
-    const cancelGenV = () => cancelGeneration(generationId, req.user.username);
-    res.on('close', cancelGenV);
-    res.on('finish', () => { res.removeListener('close', cancelGenV); });
 
     const outputDir = ensureOutputDir(username);
     const timestamp = formatTimestamp();
@@ -671,7 +647,7 @@ generateRouter.post('/interpolation', async (req, res) => {
   let allTempFiles, generationId;
   const startTime = Date.now();
   try {
-    const { model, prompt, frames, frame_positions, frame_strengths, negative_prompt, seed, duration, resolution, resolution_preset, aspect_ratio, audio_base64, audio_insert_position } = req.body;
+    const { model, prompt, frames, frame_positions, frame_strengths, negative_prompt, seed, duration, resolution, resolution_preset, aspect_ratio, audio_base64, audio_insert_position, client_generation_id } = req.body;
     const username = req.user.username;
     const modelId = modelIdOf(model, 'LTX-2-Interpolation');
     const pipelines = assertKnown(modelId, INTERPOLATION_MODEL_PIPELINES);
@@ -706,12 +682,9 @@ generateRouter.post('/interpolation', async (req, res) => {
     const originalPrompt = prompt.trim();
     const { text: interpPrompt, status: interpTranslation } = await translatePrompt(originalPrompt);
 
-    generationId = createGenerationId();
+    generationId = createGenerationId(client_generation_id);
     allTempFiles = [];
     trackTask(generationId, req.user.username);
-    const cancelGenI = () => cancelGeneration(generationId, req.user.username);
-    res.on('close', cancelGenI);
-    res.on('finish', () => { res.removeListener('close', cancelGenI); });
 
     let positions = [];
     const parsedFramePositions = parseNumberList(
@@ -903,7 +876,7 @@ generateRouter.post('/audio', async (req, res) => {
   let allTempFiles, generationId;
   const startTime = Date.now();
   try {
-    const { model, mode, inputs, language, speaker, instruct, ref_audio_base64, emo_vector, emo_text, pipeline, use_random, emo_audio_base64, emo_alpha } = req.body;
+    const { model, mode, inputs, language, speaker, instruct, ref_audio_base64, emo_vector, emo_text, pipeline, use_random, emo_audio_base64, emo_alpha, client_generation_id } = req.body;
     const username = req.user.username;
     const text = inputs?.trim();
 
@@ -949,12 +922,9 @@ generateRouter.post('/audio', async (req, res) => {
       };
     }
 
-    generationId = createGenerationId();
+    generationId = createGenerationId(client_generation_id);
     allTempFiles = [];
     trackTask(generationId, req.user.username);
-    const cancelGen = () => cancelGeneration(generationId, req.user.username);
-    res.on('close', cancelGen);
-    res.on('finish', () => { res.removeListener('close', cancelGen); });
     const outputDir = ensureOutputDir(username);
     const timestamp = formatTimestamp();
     const tasks = [];
@@ -1007,7 +977,6 @@ generateRouter.post('/audio', async (req, res) => {
         const tid = await submitTask(baseUrl, form);
         registerTaskId(generationId, tid);
         updateTaskStatus(generationId, tid, 'submitted');
-        if (isGenerationCancelled(generationId)) throw new Error('CANCELLED');
         await pollTask(baseUrl, tid, generationId);
         updateTaskStatus(generationId, tid, 'downloading');
         await downloadTask(baseUrl, tid, savePath);

@@ -20,15 +20,13 @@ function isVid(type) { return ['video','image2video','a2v','interpolation','text
 function isAud(type) { return ['audio','clone','speech'].includes(type); }
 
 export default function TaskCard({ task }) {
-  const { removeTask, cancelTask } = useTasks();
+  const { removeTask } = useTasks();
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [fullscreen, setFullscreen] = useState(false);
   const { status, prompt, model, type, results, error, duration } = task;
   const done = status === 'done';
   const failed = status === 'failed';
   const active = !done && !failed;
-  const cancelTarget = task.generationId || task.id;
-  const cancellable = ['generating', 'submitted'].includes(status) && cancelTarget;
   const r = results?.[0];
   const rUrl = r ? getMediaUrl(r.url) : null;
 
@@ -52,16 +50,11 @@ export default function TaskCard({ task }) {
         </div>
       )}
       {active && status !== 'unknown' && (
-        <div className="flex items-center justify-between gap-2 mb-2">
+        <div className="flex items-center gap-2 mb-2">
           <div className="flex items-center gap-2 min-w-0">
             <div className="w-3 h-3 border-2 border-white/10 border-t-primary rounded-full animate-spin" />
             <span className="text-[10px] text-primary animate-pulse">生成中...</span>
           </div>
-          {cancellable && (
-            <button onClick={() => cancelTask(cancelTarget)} className="text-[10px] text-white/30 hover:text-red-400 transition-colors">
-              取消
-            </button>
-          )}
         </div>
       )}
       {status === 'unknown' && (

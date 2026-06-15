@@ -1,12 +1,9 @@
 import { showToast } from '../components/common/Toast';
+import { getAuthToken } from './authStorage';
 
 export async function downloadResult(url, fallbackName = 'generated') {
   if (!url) return;
-  let token = '';
-  try {
-    const stored = localStorage.getItem('aigc_auth');
-    if (stored) token = JSON.parse(stored).token || '';
-  } catch {}
+  const token = getAuthToken();
   try {
     const headers = token ? { Authorization: `Bearer ${token}` } : {};
     const response = await fetch(url, { headers });

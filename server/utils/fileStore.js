@@ -38,16 +38,25 @@ function _writeAtom(filePath, data) {
   if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
   const tmpPath = path.join(dir, `.tmp_${uuidv4()}.json`);
   fs.writeFileSync(tmpPath, JSON.stringify(data, null, 2), 'utf-8');
-  try {
-    fs.renameSync(tmpPath, filePath);
-  } catch (err) {
-    if (err.code === 'EXDEV') {
-      fs.copyFileSync(tmpPath, filePath);
-      try { fs.unlinkSync(tmpPath); } catch {}
-    } else {
-      throw err;
+  const retryable = new Set(['EPERM', 'EBUSY', 'ENFILE', 'EMFILE']);
+  let lastError = null;
+  for (let attempt = 0; attempt < 5; attempt++) {
+    try {
+      fs.renameSync(tmpPath, filePath);
+      return;
+    } catch (err) {
+      if (err.code === 'EXDEV') {
+        fs.copyFileSync(tmpPath, filePath);
+        try { fs.unlinkSync(tmpPath); } catch {}
+        return;
+      }
+      lastError = err;
+      if (!retryable.has(err.code)) break;
+      Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, 20 * (attempt + 1));
     }
   }
+  try { fs.unlinkSync(tmpPath); } catch {}
+  throw lastError;
 }
 
 // Public: single-shot lock + write (for callers who just need to write once)

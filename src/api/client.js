@@ -1,4 +1,5 @@
 import { showToast } from '../components/common/Toast';
+import { clearAuth, getAuthToken } from '../utils/authStorage';
 
 const BASE_URL = '/api';
 const HISTORY_CACHE_TTL = 5000;
@@ -18,22 +19,13 @@ class ApiError extends Error {
 
 export function getMediaUrl(url) {
   if (!url) return '';
-  try {
-    const stored = localStorage.getItem('aigc_auth');
-    if (stored) {
-      const token = JSON.parse(stored).token || '';
-      if (token) return `${url}${url.includes('?') ? '&' : '?'}token=${encodeURIComponent(token)}`;
-    }
-  } catch {}
+  const token = getAuthToken();
+  if (token) return `${url}${url.includes('?') ? '&' : '?'}token=${encodeURIComponent(token)}`;
   return url;
 }
 
 function getToken() {
-  try {
-    const stored = localStorage.getItem('aigc_auth');
-    if (stored) return JSON.parse(stored).token || '';
-  } catch {}
-  return '';
+  return getAuthToken();
 }
 
 export async function apiPost(endpoint, body) {
@@ -74,13 +66,7 @@ async function apiRequest(endpoint, options = {}, retries = 2) {
 }
 
 async function _doRequest(endpoint, options = {}) {
-  let token = '';
-  try {
-    const stored = localStorage.getItem('aigc_auth');
-    if (stored) {
-      token = JSON.parse(stored).token || '';
-    }
-  } catch {}
+  const token = getToken();
 
   const res = await fetch(`${BASE_URL}${endpoint}`, {
     headers: {
@@ -92,7 +78,7 @@ async function _doRequest(endpoint, options = {}) {
   });
 
   if (res.status === 401) {
-    localStorage.removeItem('aigc_auth');
+    clearAuth();
     showToast('会话已过期，请重新登录', 'error', 0);
     setTimeout(() => { window.location.href = '/login'; }, 1500);
     throw new Error('Session expired, please login again');
@@ -183,7 +169,7 @@ async function getHistory(params = {}, options = {}) {
     }
 
     if (res.status === 401) {
-      localStorage.removeItem('aigc_auth');
+      clearAuth();
       showToast('会话已过期，请重新登录', 'error', 0);
       setTimeout(() => { window.location.href = '/login'; }, 1500);
       throw new Error('Session expired, please login again');
@@ -268,9 +254,4 @@ export const optimizeAPI = {
 
 export const generationTaskAPI = {
   status: (generationId) => apiRequest(`/generate/${generationId}/status`),
-
-  cancel: (generationId) =>
-    apiRequest(`/generate/${generationId}/cancel`, {
-      method: 'POST',
-    }),
 };
