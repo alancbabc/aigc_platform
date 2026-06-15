@@ -1377,6 +1377,8 @@ server/data/outputs/
 ```text
 docs/aigc-platform-architecture.svg
 docs/aigc-platform-architecture.png
+docs/aigc-platform-software-architecture.svg
+docs/aigc-platform-software-architecture.png
 ```
 
 在对外汇报或交付材料中，可按场景引用 SVG 或 PNG：
@@ -1384,5 +1386,7 @@ docs/aigc-platform-architecture.png
 ```markdown
 ![AIGC Platform 系统架构](./aigc-platform-architecture.svg)
 ![AIGC Platform 系统架构](./aigc-platform-architecture.png)
+![AIGC Platform 软件架构补充图](./aigc-platform-software-architecture.svg)
+![AIGC Platform 软件架构补充图](./aigc-platform-software-architecture.png)
 ```
 
