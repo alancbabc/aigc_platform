@@ -1,0 +1,162 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1900" height="1260" viewBox="0 0 1900 1260">
+  <defs>
+    <linearGradient id="paperBg" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#fbfcff"/>
+      <stop offset="1" stop-color="#eef4fb"/>
+    </linearGradient>
+    <linearGradient id="blueHeader" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0" stop-color="#1d4ed8"/>
+      <stop offset="1" stop-color="#0891b2"/>
+    </linearGradient>
+    <filter id="softShadow" x="-8%" y="-8%" width="116%" height="116%">
+      <feDropShadow dx="0" dy="8" stdDeviation="10" flood-color="#0f172a" flood-opacity="0.10"/>
+    </filter>
+    <marker id="arrowBlue" markerWidth="12" markerHeight="12" refX="10" refY="6" orient="auto">
+      <path d="M1,1 L11,6 L1,11 Z" fill="#2563eb"/>
+    </marker>
+    <marker id="arrowGray" markerWidth="12" markerHeight="12" refX="10" refY="6" orient="auto">
+      <path d="M1,1 L11,6 L1,11 Z" fill="#64748b"/>
+    </marker>
+    <style>
+      .title { font: 700 46px "Microsoft YaHei", "PingFang SC", Arial, sans-serif; fill: #0f172a; }
+      .subtitle { font: 400 22px "Microsoft YaHei", "PingFang SC", Arial, sans-serif; fill: #475569; }
+      .section { font: 700 21px "Microsoft YaHei", "PingFang SC", Arial, sans-serif; fill: #0f172a; letter-spacing: .5px; }
+      .boxTitle { font: 700 22px "Microsoft YaHei", "PingFang SC", Arial, sans-serif; fill: #0f172a; }
+      .boxSub { font: 400 17px "Microsoft YaHei", "PingFang SC", Arial, sans-serif; fill: #475569; }
+      .tiny { font: 400 15px "Microsoft YaHei", "PingFang SC", Arial, sans-serif; fill: #64748b; }
+      .whiteTitle { font: 700 22px "Microsoft YaHei", "PingFang SC", Arial, sans-serif; fill: #ffffff; }
+      .whiteSub { font: 400 17px "Microsoft YaHei", "PingFang SC", Arial, sans-serif; fill: #e0f2fe; }
+      .tag { font: 700 15px "Microsoft YaHei", "PingFang SC", Arial, sans-serif; fill: #334155; }
+      .legend { font: 400 15px "Microsoft YaHei", "PingFang SC", Arial, sans-serif; fill: #334155; }
+      .flow { font: 700 15px "Microsoft YaHei", "PingFang SC", Arial, sans-serif; fill: #1d4ed8; }
+      .box { fill: #ffffff; stroke: #cbd5e1; stroke-width: 1.6; rx: 18; filter: url(#softShadow); }
+      .inner { fill: #f8fafc; stroke: #dbeafe; stroke-width: 1.2; rx: 12; }
+      .opt { fill: #f8fafc; stroke: #bfdbfe; stroke-width: 1.4; rx: 15; }
+      .lineBlue { stroke: #2563eb; stroke-width: 2.4; fill: none; marker-end: url(#arrowBlue); }
+      .lineGray { stroke: #64748b; stroke-width: 2; fill: none; marker-end: url(#arrowGray); }
+      .dash { stroke-dasharray: 8 7; }
+    </style>
+  </defs>
+
+  <rect width="1900" height="1260" fill="url(#paperBg)"/>
+  <rect x="70" y="54" width="1760" height="1152" rx="30" fill="#ffffff" stroke="#dbe3ef" stroke-width="1.5"/>
+  <rect x="70" y="54" width="1760" height="8" rx="4" fill="url(#blueHeader)"/>
+
+  <text x="110" y="124" class="title">AIGC-Platform System Architecture</text>
+  <text x="110" y="162" class="subtitle">面向图片、视频、语音与插帧生成的多模态 AIGC 平台框架图</text>
+
+  <g transform="translate(1490,96)">
+    <circle cx="0" cy="0" r="7" fill="#2563eb"/>
+    <text x="18" y="5" class="legend">主业务流</text>
+    <circle cx="118" cy="0" r="7" fill="#64748b"/>
+    <text x="136" y="5" class="legend">数据与状态流</text>
+  </g>
+
+  <!-- Layer labels -->
+  <text x="110" y="228" class="section">1. Presentation &amp; Interaction Layer</text>
+  <text x="110" y="497" class="section">2. Backend API &amp; Orchestration Layer</text>
+  <text x="110" y="826" class="section">3. Model Services &amp; Data Layer</text>
+  <text x="110" y="1060" class="section">4. Reliability / Security / Usability Optimizations</text>
+
+  <!-- Frontend layer -->
+  <rect x="110" y="248" width="1680" height="188" class="box"/>
+  <rect x="140" y="286" width="260" height="108" rx="16" fill="#eff6ff" stroke="#93c5fd" stroke-width="1.5"/>
+  <text x="270" y="326" text-anchor="middle" class="boxTitle">User</text>
+  <text x="270" y="356" text-anchor="middle" class="boxSub">登录 / 创作 / 预览</text>
+  <text x="270" y="382" text-anchor="middle" class="boxSub">下载 / 复用历史</text>
+
+  <rect x="460" y="276" width="855" height="128" rx="18" fill="#ffffff" stroke="#60a5fa" stroke-width="2"/>
+  <text x="490" y="315" class="boxTitle">React SPA 工作台</text>
+  <text x="490" y="349" class="boxSub">Image Studio · Video Studio · Audio Studio · Interpolation Studio</text>
+  <text x="490" y="379" class="boxSub">History Grid / Detail · Task Panel · Prompt Panel · Upload &amp; Preview Components</text>
+
+  <rect x="1360" y="276" width="390" height="128" rx="18" fill="#f8fafc" stroke="#cbd5e1" stroke-width="1.8"/>
+  <text x="1388" y="315" class="boxTitle">Frontend State &amp; Client</text>
+  <text x="1388" y="349" class="boxSub">AuthContext / TaskContext</text>
+  <text x="1388" y="379" class="boxSub">API Client · Object URL 管理</text>
+
+  <line x1="400" y1="340" x2="452" y2="340" class="lineBlue"/>
+  <line x1="1315" y1="340" x2="1350" y2="340" class="lineGray"/>
+  <text x="718" y="426" class="flow">REST / JSON · JWT Token · Media URL with Access Token</text>
+
+  <!-- Backend layer -->
+  <rect x="110" y="520" width="1680" height="242" class="box"/>
+  <rect x="140" y="558" width="335" height="154" class="inner"/>
+  <text x="170" y="596" class="boxTitle">Express API Gateway</text>
+  <text x="170" y="630" class="boxSub">/api/auth · /api/generate · /api/history</text>
+  <text x="170" y="660" class="boxSub">JWT middleware · logger · CORS</text>
+  <text x="170" y="690" class="boxSub">rate-limit · global error handler</text>
+
+  <rect x="515" y="558" width="475" height="154" class="inner"/>
+  <text x="545" y="596" class="boxTitle">Generation Orchestrator</text>
+  <text x="545" y="630" class="boxSub">参数校验 · 分辨率 / 比例换算 · Pipeline 选择</text>
+  <text x="545" y="660" class="boxSub">multipart/form-data 提交自部署服务</text>
+  <text x="545" y="690" class="boxSub">submit → poll status → download → archive</text>
+
+  <rect x="1030" y="558" width="395" height="154" class="inner"/>
+  <text x="1060" y="596" class="boxTitle">Prompt Intelligence</text>
+  <text x="1060" y="630" class="boxSub">Prompt 优化 · 中文提示词翻译</text>
+  <text x="1060" y="660" class="boxSub">保留引号内文本与关键语义</text>
+  <text x="1060" y="690" class="boxSub">Gitee LLM 作为可选增强服务</text>
+
+  <rect x="1465" y="558" width="285" height="154" class="inner"/>
+  <text x="1495" y="596" class="boxTitle">Task Lifecycle</text>
+  <text x="1495" y="630" class="boxSub">生成 ID · 状态同步</text>
+  <text x="1495" y="660" class="boxSub">取消 · 超时 · 重试</text>
+  <text x="1495" y="690" class="boxSub">临时文件清理</text>
+
+  <path d="M950 436 C950 470 950 485 950 512" class="lineBlue"/>
+  <path d="M475 635 L506 635" class="lineBlue"/>
+  <path d="M990 635 L1021 635" class="lineGray"/>
+  <path d="M1425 635 L1456 635" class="lineGray"/>
+
+  <!-- Model and data layer -->
+  <rect x="110" y="848" width="1030" height="152" class="box"/>
+  <rect x="140" y="884" width="220" height="82" rx="14" fill="#eff6ff" stroke="#60a5fa" stroke-width="1.6"/>
+  <text x="250" y="918" text-anchor="middle" class="boxTitle">Qwen Image</text>
+  <text x="250" y="948" text-anchor="middle" class="tiny">Text-to-Image / Image Edit · :9000</text>
+
+  <rect x="385" y="884" width="220" height="82" rx="14" fill="#ecfeff" stroke="#22d3ee" stroke-width="1.6"/>
+  <text x="495" y="918" text-anchor="middle" class="boxTitle">LTX 2.3</text>
+  <text x="495" y="948" text-anchor="middle" class="tiny">Video / I2V / Keyframe · :8000</text>
+
+  <rect x="630" y="884" width="220" height="82" rx="14" fill="#f5f3ff" stroke="#a78bfa" stroke-width="1.6"/>
+  <text x="740" y="918" text-anchor="middle" class="boxTitle">Qwen3 TTS</text>
+  <text x="740" y="948" text-anchor="middle" class="tiny">Multilingual TTS · :9200</text>
+
+  <rect x="875" y="884" width="230" height="82" rx="14" fill="#fdf2f8" stroke="#f472b6" stroke-width="1.6"/>
+  <text x="990" y="918" text-anchor="middle" class="boxTitle">IndexTTS 2</text>
+  <text x="990" y="948" text-anchor="middle" class="tiny">Voice Clone / Emotion · :9300</text>
+
+  <rect x="1200" y="848" width="590" height="152" class="box"/>
+  <text x="1232" y="889" class="boxTitle">Local Persistence</text>
+  <text x="1232" y="924" class="boxSub">JSON Store：users / tasks / histories / params</text>
+  <text x="1232" y="954" class="boxSub">Output Store：images / videos / audios by user directory</text>
+  <text x="1232" y="984" class="boxSub">Protected Media：JWT 校验 + 用户目录隔离 + HTTP cache</text>
+
+  <path d="M754 762 C754 805 754 815 754 842" class="lineBlue"/>
+  <path d="M1608 712 C1608 790 1540 812 1495 842" class="lineGray"/>
+  <text x="782" y="814" class="flow">multipart request / status polling / result download</text>
+
+  <!-- Optimizations -->
+  <rect x="110" y="1082" width="1680" height="86" class="box"/>
+  <g transform="translate(145,1108)">
+    <rect x="0" y="0" width="230" height="38" class="opt"/>
+    <text x="115" y="25" text-anchor="middle" class="tag">任务持久化与刷新恢复</text>
+    <rect x="250" y="0" width="230" height="38" class="opt"/>
+    <text x="365" y="25" text-anchor="middle" class="tag">前后台动态轮询</text>
+    <rect x="500" y="0" width="230" height="38" class="opt"/>
+    <text x="615" y="25" text-anchor="middle" class="tag">超时重试与错误兜底</text>
+    <rect x="750" y="0" width="230" height="38" class="opt"/>
+    <text x="865" y="25" text-anchor="middle" class="tag">原子 JSON 写入</text>
+    <rect x="1000" y="0" width="230" height="38" class="opt"/>
+    <text x="1115" y="25" text-anchor="middle" class="tag">媒体缓存与资源释放</text>
+    <rect x="1250" y="0" width="245" height="38" class="opt"/>
+    <text x="1372" y="25" text-anchor="middle" class="tag">JWT 鉴权 / 限流 / 隔离</text>
+  </g>
+
+  <!-- Side annotation: business functions -->
+  <rect x="110" y="1188" width="1680" height="1.5" fill="#dbe3ef"/>
+  <text x="110" y="1224" class="tiny">Business Functions: Image Generation · Image Editing · Text-to-Video · Image-to-Video · Keyframe Interpolation · Text-to-Speech · Voice Cloning · History Management</text>
+  <text x="1570" y="1224" class="tiny">AIGC Platform · Academic Diagram Style</text>
+</svg>
